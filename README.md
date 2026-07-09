@@ -22,9 +22,9 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 - **Solar Noon at Prime Meridian** — Greenwich solar noon in UTC (illustrates equation of time)
 - **Moon Phase** — current lunar phase name
 - **Location readout** — sunrise, sunset, and day length, shown in one of three modes:
-  - **Hover any point** on the map → times in UTC (timezone-independent, always correct)
-  - **Click a major city marker** → times in that city's IANA timezone (e.g. `05:21 PDT` for Seattle, `04:54 BST` for London)
-  - **Use My Location** button → times in the browser's local timezone (correct because the user is physically there)
+  - **Hover any point** on the map → sunrise/sunset stay in UTC with the coordinate's local civil time underneath
+  - **Click a major city marker** → UTC sunrise/sunset with that city's IANA timezone underneath (e.g. `05:21 PDT` for Seattle, `04:54 BST` for London)
+  - **Use My Location** button → browser-location card uses local time, while the map point card keeps UTC plus local time
 - **Browser location context** — displays the browser's IANA timezone immediately, and fills the nearest major city plus local sunrise/sunset/day length when geolocation is already granted or when the viewer clicks **Use My Location**.
 
 ### Controls
@@ -57,11 +57,12 @@ Open the title to return to the clean root URL. Exact views can still be opened 
 | Mapping | [Leaflet](https://leafletjs.com/) 1.9.4 |
 | Solar position (subsolar + twilight) | Self-contained first-principles algorithm (low-precision solar position + GMST + geodesic spherical caps) |
 | Auxiliary solar/lunar data | [SunCalc](https://github.com/mourner/suncalc) 1.9.0 — used only for Greenwich solar noon, moon phase, and hover sunrise/sunset/day-length |
+| Timezone lookup | [tz-lookup](https://github.com/darkskyapp/tz-lookup-oss) 6.1.25 — maps arbitrary lat/lng points to IANA timezones for local civil time |
 | Base map | Esri World Dark Gray Base + Boundaries & Places |
 | Hosting | Static nginx container behind Nginx Proxy Manager |
 | Deployment | Docker Compose on a VPS |
 
-> **Note on time display:** Times are shown in UTC by default for arbitrary map hovers (timezone-independent and unambiguous). Clicking a major city marker or using "Use My Location" displays times in that location's own timezone — IANA timezones are hardcoded per city in `app.js`, and the browser's local timezone is used for "Use My Location". Day length is timezone-independent and always correct.
+> **Note on time display:** The map point card keeps UTC as the primary sunrise/sunset time and adds the selected point's local civil time underneath when a timezone can be resolved. Major city markers use their hardcoded IANA timezones, arbitrary points use `tz-lookup`, and the browser-location card uses the browser's local timezone. Day length is timezone-independent and always correct.
 
 ## Astronomy
 
@@ -150,7 +151,6 @@ The **Follow Sun** control starts *off* so shared and first-load views are prese
 
 ## Known Limitations
 
-- **Hover sunrise/sunset for arbitrary points are shown in UTC**, not in the hovered location's local civil time. True civil-time display for arbitrary lat/lng (not just known cities) would require a timezone lookup library (e.g. `tz-lookup`), which is not yet bundled. Click a major city or use "Use My Location" for local-time display.
 - **Sun marker** is placed at the exact computed longitude; with `worldCopyJump: true` it may occasionally appear at the antimeridian edge during wrapping. The displayed coordinate is always in `[−180, 180]`.
 - **Geolocation requires HTTPS and user permission.** On `http://` (e.g. local dev without TLS) or if the user denies the prompt, the button reports the error inline.
 

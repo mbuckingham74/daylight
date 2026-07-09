@@ -439,6 +439,73 @@
     }
   }
 
+  function formatClockTz(date, timeZone) {
+    if (!date || isNaN(date.getTime())) return '--:--:--';
+    if (!timeZone) return date.toISOString().slice(11, 19);
+    try {
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone });
+    } catch (e) {
+      return date.toISOString().slice(11, 19);
+    }
+  }
+
+  function lookupTimeZone(lat, lng) {
+    if (typeof window.tzlookup !== 'function') return null;
+    try {
+      return window.tzlookup(lat, lng);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function getTimeZoneLabel(timeZone, date) {
+    if (!timeZone) return '';
+    return getTimeZoneAbbr(timeZone, date) || timeZone;
+  }
+
+  function setStatValue(id, text) {
+    const el = document.getElementById(id);
+    el.classList.remove('stacked-value');
+    el.textContent = text;
+  }
+
+  function setStackedTimeValue(id, primary, secondary) {
+    const el = document.getElementById(id);
+    el.classList.toggle('stacked-value', Boolean(secondary));
+    el.textContent = '';
+
+    const primaryLine = document.createElement('span');
+    primaryLine.className = 'time-primary';
+    primaryLine.textContent = primary;
+    el.appendChild(primaryLine);
+
+    if (secondary) {
+      const secondaryLine = document.createElement('span');
+      secondaryLine.className = 'time-secondary';
+      secondaryLine.textContent = secondary;
+      el.appendChild(secondaryLine);
+    }
+  }
+
+  function setUtcAndLocalTimeValue(id, date, timeZone) {
+    const utcText = formatTime(date) + ' UTC';
+    const timeZoneLabel = getTimeZoneLabel(timeZone, date);
+    const localText = timeZone && timeZoneLabel
+      ? formatTimeTz(date, timeZone) + ' ' + timeZoneLabel
+      : '';
+    setStackedTimeValue(id, utcText, localText);
+  }
+
+  function setLocalClockValue(date, timeZone) {
+    const timeZoneLabel = getTimeZoneLabel(timeZone, date);
+    if (!timeZone || !timeZoneLabel) {
+      setStatValue('hover-local-time', 'Unavailable');
+      return;
+    }
+
+    setStatValue('hover-local-time', formatClockTz(date, timeZone) + ' ' + timeZoneLabel);
+  }
+
   function formatDuration(seconds) {
     if (!isFinite(seconds) || seconds < 0) return '--';
     const h = Math.floor(seconds / 3600);
@@ -483,59 +550,54 @@
 
     const moonIllum = SunCalc.getMoonIllumination(date);
     document.getElementById('moon-phase').textContent = getMoonPhaseName(moonIllum.phase);
+    refreshMapPointReadout(date);
     updateBrowserLocalSunReadout(date);
   }
+
+  let activeMapPoint = null;
 
   function updateHover(latlng, label = 'Hovered map point') {
     const lat = latlng.lat;
     const lng = (((latlng.lng + 180) % 360 + 360) % 360) - 180;
-    const now = currentTime();
-    const times = SunCalc.getTimes(now, lat, lng);
-    const hasSunTimes = isValidDate(times.sunrise) && isValidDate(times.sunset);
-
-    document.getElementById('location-info').querySelector('h2').textContent = label;
-    document.getElementById('hover-coords').textContent = formatCoord(lat, lng);
-
-    if (hasSunTimes) {
-      document.getElementById('hover-sunrise').textContent = formatTime(times.sunrise) + ' UTC';
-      document.getElementById('hover-sunset').textContent = formatTime(times.sunset) + ' UTC';
-      document.getElementById('hover-daylength').textContent = formatDuration((times.sunset - times.sunrise) / 1000);
-      return;
-    }
-
-    const isDaylight = getSolarSinAltitude(now, lat, lng) >= TWILIGHT_THRESHOLDS.daylight;
-    document.getElementById('hover-sunrise').textContent = 'No sunrise';
-    document.getElementById('hover-sunset').textContent = 'No sunset';
-    document.getElementById('hover-daylength').textContent = formatPolarDayLength(isDaylight);
+    activeMapPoint = { lat, lng, label, timeZone: lookupTimeZone(lat, lng) };
+    refreshMapPointReadout();
   }
 
-  // Show sunrise/sunset for a known location (city or "my location") in its
-  // own IANA timezone. Falls back to UTC if no timezone is provided.
+  // Show sunrise/sunset for a known location (city or "my location"). The
+  // map card keeps UTC primary and adds the location's civil time underneath.
   function showLocationTimes(lat, lng, label, timeZone) {
-    const now = currentTime();
-    const times = SunCalc.getTimes(now, lat, lng);
+    const normalizedLng = (((lng + 180) % 360 + 360) % 360) - 180;
+    activeMapPoint = { lat, lng: normalizedLng, label, timeZone: timeZone || lookupTimeZone(lat, normalizedLng) };
+    refreshMapPointReadout();
+  }
+
+  function refreshMapPointReadout(date = currentTime()) {
+    if (!activeMapPoint) return;
+
+    const { lat, lng, label, timeZone } = activeMapPoint;
+    const times = SunCalc.getTimes(date, lat, lng);
     const hasSunTimes = isValidDate(times.sunrise) && isValidDate(times.sunset);
 
     document.getElementById('location-info').querySelector('h2').textContent = label;
     document.getElementById('hover-coords').textContent = formatCoord(lat, lng);
-    const tzSuffix = timeZone ? ' ' + getTimeZoneAbbr(timeZone) : ' UTC';
+    setLocalClockValue(date, timeZone);
 
     if (hasSunTimes) {
-      document.getElementById('hover-sunrise').textContent = formatTimeTz(times.sunrise, timeZone) + tzSuffix;
-      document.getElementById('hover-sunset').textContent = formatTimeTz(times.sunset, timeZone) + tzSuffix;
-      document.getElementById('hover-daylength').textContent = formatDuration((times.sunset - times.sunrise) / 1000);
+      setUtcAndLocalTimeValue('hover-sunrise', times.sunrise, timeZone);
+      setUtcAndLocalTimeValue('hover-sunset', times.sunset, timeZone);
+      setStatValue('hover-daylength', formatDuration((times.sunset - times.sunrise) / 1000));
       return;
     }
 
-    const isDaylight = getSolarSinAltitude(now, lat, lng) >= TWILIGHT_THRESHOLDS.daylight;
-    document.getElementById('hover-sunrise').textContent = 'No sunrise';
-    document.getElementById('hover-sunset').textContent = 'No sunset';
-    document.getElementById('hover-daylength').textContent = formatPolarDayLength(isDaylight);
+    const isDaylight = getSolarSinAltitude(date, lat, lng) >= TWILIGHT_THRESHOLDS.daylight;
+    setStatValue('hover-sunrise', 'No sunrise');
+    setStatValue('hover-sunset', 'No sunset');
+    setStatValue('hover-daylength', formatPolarDayLength(isDaylight));
   }
 
-  function getTimeZoneAbbr(timeZone) {
+  function getTimeZoneAbbr(timeZone, date = new Date()) {
     try {
-      const parts = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'short' }).formatToParts(new Date());
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'short' }).formatToParts(date);
       const tzPart = parts.find(p => p.type === 'timeZoneName');
       return tzPart ? tzPart.value : '';
     } catch (e) {
@@ -600,7 +662,7 @@
 
     const times = SunCalc.getTimes(date, browserLocation.lat, browserLocation.lng);
     const hasSunTimes = isValidDate(times.sunrise) && isValidDate(times.sunset);
-    const tzSuffix = browserLocation.timeZone ? ' ' + getTimeZoneAbbr(browserLocation.timeZone) : ' UTC';
+    const tzSuffix = browserLocation.timeZone ? ' ' + getTimeZoneAbbr(browserLocation.timeZone, date) : ' UTC';
 
     if (hasSunTimes) {
       document.getElementById('browser-sunrise').textContent = formatTimeTz(times.sunrise, browserLocation.timeZone) + tzSuffix;
