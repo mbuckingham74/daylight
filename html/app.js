@@ -10,6 +10,7 @@
   const initialLat = parseFloat(urlParams.get('lat'));
   const initialLng = parseFloat(urlParams.get('lon'));
   const initialZoom = parseInt(urlParams.get('zoom'), 10);
+  const syncViewInUrl = urlParams.has('lat') || urlParams.has('lon') || urlParams.has('zoom');
 
   const mapCenter = (!isNaN(initialLat) && !isNaN(initialLng)) ? [initialLat, initialLng] : [20, 0];
   const mapZoom = initialZoom || 3;
@@ -23,6 +24,10 @@
     worldCopyJump: true
   });
 
+  map.createPane('twilightPane');
+  map.getPane('twilightPane').style.zIndex = 350;
+  map.getPane('twilightPane').style.pointerEvents = 'none';
+
   // Muted dark terrain-ish base + subtle reference overlay for borders/labels
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
     attribution: 'Tiles &copy; Esri',
@@ -33,8 +38,7 @@
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
     attribution: '',
     maxZoom: 16,
-    noWrap: false,
-    pane: 'overlayPane'
+    noWrap: false
   }).addTo(map);
 
   // Compute the Sun's equatorial coordinates (right ascension, declination) and GMST
@@ -81,151 +85,161 @@
     return ((lng + 540) % 360) - 180;
   }
 
-  // Generate points along a geodesic circle on the sphere.
-  // All output longitudes are normalized to [-180, 180).
-  function geodesicCircle(lat0, lng0, radiusDeg, numPoints) {
-    const points = [];
-    const lat0r = lat0 * D2R;
-    const lon0r = wrapLng(lng0) * D2R;
-    const dr = radiusDeg * D2R;
-
-    for (let i = 0; i <= numPoints; i++) {
-      const bearing = i * 2 * Math.PI / numPoints;
-      const lat = Math.asin(Math.sin(lat0r) * Math.cos(dr) +
-        Math.cos(lat0r) * Math.sin(dr) * Math.cos(bearing));
-      const lon = lon0r + Math.atan2(
-        Math.sin(bearing) * Math.sin(dr) * Math.cos(lat0r),
-        Math.cos(dr) - Math.sin(lat0r) * Math.sin(lat)
-      );
-      points.push([lat * R2D, wrapLng(lon * R2D)]);
-    }
-
-    return points;
-  }
-
-  // Split a ring of [lat, lng] points at antimeridian crossings into
-  // multiple segments, each with continuous longitudes in [-180, 180].
-  // Interpolates the latitude at the crossing so each segment closes properly.
-  // Returns an array of rings (each ring is an array of [lat, lng] points).
-  function splitAtAntimeridian(ring) {
-    if (ring.length < 2) return [ring];
-    const segments = [];
-    let current = [ring[0]];
-
-    for (let i = 1; i < ring.length; i++) {
-      const prev = ring[i - 1];
-      const curr = ring[i];
-      const dLng = curr[1] - prev[1];
-
-      if (Math.abs(dLng) > 180) {
-        // Antimeridian crossing — interpolate latitude at ±180°
-        let frac, sign;
-        if (dLng < -180) {
-          // Going east: prev near +180, curr near -180
-          const unwrappedCurr = curr[1] + 360;
-          frac = (180 - prev[1]) / (unwrappedCurr - prev[1]);
-          sign = 180;  // current segment ends at +180
-        } else {
-          // Going west: prev near -180, curr near +180
-          const unwrappedCurr = curr[1] - 360;
-          frac = (-180 - prev[1]) / (unwrappedCurr - prev[1]);
-          sign = -180;  // current segment ends at -180
-        }
-        frac = Math.max(0, Math.min(1, frac));
-        const latAtMeridian = prev[0] + frac * (curr[0] - prev[0]);
-        current.push([latAtMeridian, sign]);
-        segments.push(current);
-        current = [[latAtMeridian, -sign], curr];
-      } else {
-        current.push(curr);
-      }
-    }
-    segments.push(current);
-
-    return segments;
-  }
-
-  // Build twilight band polygon(s). Bands are geodesic rings/caps centered on
-  // the antisolar point. Angular radius from antipode = 90° + altitude.
-  // Returns an array of rings, each a closed polygon suitable for L.polygon.
-  // Key: outer and inner circles are split at the antimeridian SEPARATELY,
-  // then paired by side so each segment is a proper annular section, not
-  // just an arc that would fill incorrectly.
-  function computeTwilightBand(date, rOuter, rInner, isCap) {
-    const subsolar = getSubsolarPoint(date);
-    const antipodeLat = -subsolar.lat;
-    const antipodeLng = wrapLng(subsolar.lng + 180);
-    const poleLat = subsolar.lat > 0 ? -90 : 90;
-
-    const outer = geodesicCircle(antipodeLat, antipodeLng, rOuter, 180);
-    const outerSegs = splitAtAntimeridian(outer);
-
-    if (isCap) {
-      // Night core: each outer segment + pole = a wedge of the cap
-      return outerSegs.map(seg => {
-        const last = seg[seg.length - 1];
-        return seg.concat([[poleLat, last[1]]]);
-      });
-    }
-
-    const inner = geodesicCircle(antipodeLat, antipodeLng, rInner, 180);
-    const innerSegs = splitAtAntimeridian(inner);
-
-    // Pair outer and inner segments by index. Concentric circles cross the
-    // antimeridian at the same longitudes, so segment counts match.
-    const numSegs = Math.max(outerSegs.length, innerSegs.length);
-    const rings = [];
-    for (let i = 0; i < numSegs; i++) {
-      const os = outerSegs[i % outerSegs.length];
-      const is = innerSegs[i % innerSegs.length];
-      // Annular section: outer arc → pole → inner arc (reversed) → pole
-      const ring = os
-        .concat([[poleLat, os[os.length - 1][1]]])
-        .concat(is.slice().reverse())
-        .concat([[poleLat, is[0][1]]]);
-      rings.push(ring);
-    }
-    return rings;
-  }
-
-  // Twilight band layers (from lightest to darkest). Angular radii are measured
-  // from the antisolar point: radius = 90° + solar altitude.
-  // The outermost boundary uses -0.833° (standard refraction + solar disk)
-  // so the daylight/twilight line matches observed sunrise/sunset.
+  // The daylight/twilight layer is rendered as canvas map tiles instead of
+  // polygons. This keeps the overlay aligned through antimeridian wrapping,
+  // world copies, and Web Mercator projection without hand-closing rings.
   const REFRACTION = 0.833;
-  const twilightDefs = [
-    { rOuter: 90 - REFRACTION, rInner: 84, fillOpacity: 0.08, color: '#030816' },
-    { rOuter: 84, rInner: 78, fillOpacity: 0.12, color: '#030816' },
-    { rOuter: 78, rInner: 72, fillOpacity: 0.18, color: '#030816' },
-    { rOuter: 72, rInner: 0, fillOpacity: 0.40, color: '#020612', isCap: true }
-  ];
+  const DAY_COLOR = [255, 205, 92];
+  const TWILIGHT_COLOR = [5, 12, 30];
+  const NIGHT_COLOR = [1, 4, 14];
+  const TWILIGHT_THRESHOLDS = {
+    daylight: Math.sin(-REFRACTION * D2R),
+    daylightGlow: Math.sin(18 * D2R),
+    astronomical: Math.sin(-18 * D2R)
+  };
 
-  const twilightLayers = twilightDefs.map(def => {
-    return L.polygon([], {
-      color: 'transparent',
-      opacity: 0,
-      fillColor: def.color,
-      fillOpacity: def.fillOpacity,
-      interactive: false,
-      smoothFactor: 0
-    }).addTo(map);
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function smoothstep(edge0, edge1, value) {
+    const t = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+    return t * t * (3 - 2 * t);
+  }
+
+  function mixColor(from, to, amount) {
+    return [
+      Math.round(from[0] + (to[0] - from[0]) * amount),
+      Math.round(from[1] + (to[1] - from[1]) * amount),
+      Math.round(from[2] + (to[2] - from[2]) * amount)
+    ];
+  }
+
+  function getSunRenderState(date) {
+    const subsolar = getSubsolarPoint(date);
+    const declination = subsolar.lat * D2R;
+    return {
+      lat: subsolar.lat,
+      lng: subsolar.lng,
+      sinDec: Math.sin(declination),
+      cosDec: Math.cos(declination)
+    };
+  }
+
+  function getTwilightPixel(sinAltitude) {
+    if (sinAltitude >= TWILIGHT_THRESHOLDS.daylight) {
+      const glow = smoothstep(TWILIGHT_THRESHOLDS.daylight, TWILIGHT_THRESHOLDS.daylightGlow, sinAltitude);
+      const alpha = Math.round(10 * glow);
+      return alpha > 0 ? { color: DAY_COLOR, alpha } : null;
+    }
+
+    const nightAmount = smoothstep(
+      TWILIGHT_THRESHOLDS.daylight,
+      TWILIGHT_THRESHOLDS.astronomical,
+      sinAltitude
+    );
+    const color = mixColor(TWILIGHT_COLOR, NIGHT_COLOR, nightAmount);
+    const alpha = Math.round(12 + 104 * nightAmount);
+    return { color, alpha };
+  }
+
+  function getSolarSinAltitude(date, lat, lng) {
+    const sun = getSunRenderState(date);
+    const latR = lat * D2R;
+    const hourAngle = wrapLng(lng - sun.lng) * D2R;
+    return Math.sin(latR) * sun.sinDec + Math.cos(latR) * sun.cosDec * Math.cos(hourAngle);
+  }
+
+  const TwilightGridLayer = L.GridLayer.extend({
+    initialize: function (options) {
+      L.setOptions(this, options);
+      this._sun = getSunRenderState(options.date || new Date());
+    },
+
+    createTile: function (coords) {
+      const tile = L.DomUtil.create('canvas', 'leaflet-tile twilight-tile');
+      const size = this.getTileSize();
+      tile.width = size.x;
+      tile.height = size.y;
+      tile.style.width = size.x + 'px';
+      tile.style.height = size.y + 'px';
+      this._drawTile(tile, coords);
+      return tile;
+    },
+
+    setDate: function (date) {
+      this._sun = getSunRenderState(date);
+      this._redrawVisibleTiles();
+      return this;
+    },
+
+    _redrawVisibleTiles: function () {
+      if (!this._tiles) return;
+      Object.keys(this._tiles).forEach(key => {
+        const record = this._tiles[key];
+        this._drawTile(record.el, record.coords);
+      });
+    },
+
+    _drawTile: function (tile, coords) {
+      const size = this.getTileSize();
+      const width = size.x;
+      const height = size.y;
+      const ctx = tile.getContext('2d');
+      const image = ctx.createImageData(width, height);
+      const data = image.data;
+      const worldSize = width * Math.pow(2, coords.z);
+      const startX = coords.x * width;
+      const startY = coords.y * height;
+      const sun = this._sun;
+      const cosHourAngles = new Float32Array(width);
+
+      for (let x = 0; x < width; x++) {
+        const lng = ((startX + x) / worldSize) * 360 - 180;
+        cosHourAngles[x] = Math.cos(wrapLng(lng - sun.lng) * D2R);
+      }
+
+      for (let y = 0; y < height; y++) {
+        const mercatorY = Math.PI - 2 * Math.PI * (startY + y) / worldSize;
+        const lat = Math.atan(Math.sinh(mercatorY));
+        const sinLat = Math.sin(lat);
+        const cosLat = Math.cos(lat);
+
+        for (let x = 0; x < width; x++) {
+          const sinAltitude = sinLat * sun.sinDec + cosLat * sun.cosDec * cosHourAngles[x];
+          const pixel = getTwilightPixel(sinAltitude);
+          if (!pixel) continue;
+
+          const offset = (y * width + x) * 4;
+          data[offset] = pixel.color[0];
+          data[offset + 1] = pixel.color[1];
+          data[offset + 2] = pixel.color[2];
+          data[offset + 3] = pixel.alpha;
+        }
+      }
+
+      ctx.putImageData(image, 0, 0);
+    }
   });
 
+  const twilightLayer = new TwilightGridLayer({
+    pane: 'twilightPane',
+    tileSize: 256,
+    updateWhenIdle: true,
+    updateWhenZooming: false,
+    keepBuffer: 1,
+    date: initialTime || new Date()
+  }).addTo(map);
+
   function updateTwilight(date) {
-    twilightDefs.forEach((def, i) => {
-      const rings = computeTwilightBand(date, def.rOuter, def.rInner, def.isCap);
-      // Each ring is a standalone polygon (annular section or cap wedge).
-      // Use multipolygon format: [polygon1_rings, polygon2_rings, ...]
-      // where each polygon's rings = [outer_ring] (no holes).
-      twilightLayers[i].setLatLngs(rings.map(r => [r]));
-    });
+    twilightLayer.setDate(date);
   }
 
   const subsolarMarker = L.circleMarker([0, 0], {
-    radius: 8,
+    radius: 11,
     fillColor: '#ffd700',
     color: '#ffaa00',
-    weight: 2,
+    weight: 3,
     opacity: 1,
     fillOpacity: 0.9
   }).addTo(map);
@@ -236,7 +250,7 @@
     offset: [10, 0],
     className: 'city-label'
   })
-    .setContent('Subsolar point')
+    .setContent('Sun')
     .setLatLng([0, 0]);
 
   const cities = [
@@ -319,6 +333,14 @@
     return `${h}h ${m}m`;
   }
 
+  function isValidDate(date) {
+    return date && !isNaN(date.getTime());
+  }
+
+  function formatPolarDayLength(isDaylight) {
+    return isDaylight ? '24h 0m' : '0h 0m';
+  }
+
   function getMoonPhaseName(phase) {
     const age = phase * 29.53;
     if (age < 1) return 'New Moon';
@@ -355,17 +377,22 @@
     const lng = (((latlng.lng + 180) % 360 + 360) % 360) - 180;
     const now = currentTime();
     const times = SunCalc.getTimes(now, lat, lng);
+    const hasSunTimes = isValidDate(times.sunrise) && isValidDate(times.sunset);
 
     document.getElementById('location-info').querySelector('h2').textContent = 'Hover a location';
     document.getElementById('hover-coords').textContent = formatCoord(lat, lng);
-    document.getElementById('hover-sunrise').textContent = formatTime(times.sunrise) + ' UTC';
-    document.getElementById('hover-sunset').textContent = formatTime(times.sunset) + ' UTC';
 
-    let dayLength = 0;
-    if (times.sunset && times.sunrise && !isNaN(times.sunset) && !isNaN(times.sunrise)) {
-      dayLength = (times.sunset - times.sunrise) / 1000;
+    if (hasSunTimes) {
+      document.getElementById('hover-sunrise').textContent = formatTime(times.sunrise) + ' UTC';
+      document.getElementById('hover-sunset').textContent = formatTime(times.sunset) + ' UTC';
+      document.getElementById('hover-daylength').textContent = formatDuration((times.sunset - times.sunrise) / 1000);
+      return;
     }
-    document.getElementById('hover-daylength').textContent = formatDuration(dayLength);
+
+    const isDaylight = getSolarSinAltitude(now, lat, lng) >= TWILIGHT_THRESHOLDS.daylight;
+    document.getElementById('hover-sunrise').textContent = 'No sunrise';
+    document.getElementById('hover-sunset').textContent = 'No sunset';
+    document.getElementById('hover-daylength').textContent = formatPolarDayLength(isDaylight);
   }
 
   // Show sunrise/sunset for a known location (city or "my location") in its
@@ -373,18 +400,23 @@
   function showLocationTimes(lat, lng, label, timeZone) {
     const now = currentTime();
     const times = SunCalc.getTimes(now, lat, lng);
+    const hasSunTimes = isValidDate(times.sunrise) && isValidDate(times.sunset);
 
     document.getElementById('location-info').querySelector('h2').textContent = label;
     document.getElementById('hover-coords').textContent = formatCoord(lat, lng);
     const tzSuffix = timeZone ? ' ' + getTimeZoneAbbr(timeZone) : ' UTC';
-    document.getElementById('hover-sunrise').textContent = formatTimeTz(times.sunrise, timeZone) + tzSuffix;
-    document.getElementById('hover-sunset').textContent = formatTimeTz(times.sunset, timeZone) + tzSuffix;
 
-    let dayLength = 0;
-    if (times.sunset && times.sunrise && !isNaN(times.sunset) && !isNaN(times.sunrise)) {
-      dayLength = (times.sunset - times.sunrise) / 1000;
+    if (hasSunTimes) {
+      document.getElementById('hover-sunrise').textContent = formatTimeTz(times.sunrise, timeZone) + tzSuffix;
+      document.getElementById('hover-sunset').textContent = formatTimeTz(times.sunset, timeZone) + tzSuffix;
+      document.getElementById('hover-daylength').textContent = formatDuration((times.sunset - times.sunrise) / 1000);
+      return;
     }
-    document.getElementById('hover-daylength').textContent = formatDuration(dayLength);
+
+    const isDaylight = getSolarSinAltitude(now, lat, lng) >= TWILIGHT_THRESHOLDS.daylight;
+    document.getElementById('hover-sunrise').textContent = 'No sunrise';
+    document.getElementById('hover-sunset').textContent = 'No sunset';
+    document.getElementById('hover-daylength').textContent = formatPolarDayLength(isDaylight);
   }
 
   function getTimeZoneAbbr(timeZone) {
@@ -458,7 +490,7 @@
   const liveBtn = document.getElementById('live-btn');
   const presetBtns = document.querySelectorAll('[data-preset]');
 
-  let followSun = !isNaN(initialLat) && !isNaN(initialLng) ? false : true;
+  let followSun = false;
   let isLive = !initialTime;
   let manualTime = initialTime ? new Date(initialTime.getTime()) : new Date();
   let sliderOffsetHours = 0;
@@ -468,8 +500,8 @@
     return new Date(manualTime.getTime() + sliderOffsetHours * 3600000);
   }
 
-  // The subsolar marker and label are always on the map — the "Follow
-  // subsolar point" toggle only controls auto-panning, not visibility.
+  // The Sun marker and label are always on the map — the "Follow Sun"
+  // toggle only controls auto-panning, not visibility.
   function setFollowSun(enabled) {
     followSun = enabled;
     followSunCheckbox.checked = enabled;
@@ -491,12 +523,9 @@
   map.on('dragstart', onUserMovedMap);
   map.on('zoomstart', onUserMovedMap);
 
-  const twilightOpacities = twilightDefs.map(def => def.fillOpacity);
   showTerminatorCheckbox.addEventListener('change', function () {
     const visible = this.checked;
-    twilightLayers.forEach((layer, i) => {
-      layer.setStyle({ fillOpacity: visible ? twilightOpacities[i] : 0 });
-    });
+    twilightLayer.setOpacity(visible ? 1 : 0);
   });
 
   showCitiesCheckbox.addEventListener('change', function () {
@@ -577,21 +606,27 @@
     });
   });
 
-  // Permalink: time, lat, lon, zoom
+  // Permalink: keep the root URL clean unless the page was opened as an
+  // explicit map view. Time travel still gets a shareable timestamp.
   let permalinkDebounce;
   function updatePermalink() {
     clearTimeout(permalinkDebounce);
     permalinkDebounce = setTimeout(() => {
-      const center = map.getCenter();
       const params = new URLSearchParams();
       const time = currentTime();
       if (!isLive) {
         params.set('time', time.toISOString());
       }
-      params.set('lat', center.lat.toFixed(4));
-      params.set('lon', center.lng.toFixed(4));
-      params.set('zoom', map.getZoom());
-      const newUrl = `${window.location.pathname}?${params.toString()}`;
+
+      if (syncViewInUrl) {
+        const center = map.getCenter();
+        params.set('lat', center.lat.toFixed(4));
+        params.set('lon', wrapLng(center.lng).toFixed(4));
+        params.set('zoom', map.getZoom());
+      }
+
+      const query = params.toString();
+      const newUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
       window.history.replaceState(null, '', newUrl);
     }, 300);
   }

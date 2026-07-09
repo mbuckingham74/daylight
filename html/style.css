@@ -43,6 +43,16 @@ html, body {
   letter-spacing: -0.02em;
 }
 
+.panel h1 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.panel h1 a:hover,
+.panel h1 a:focus-visible {
+  color: #ffffff;
+}
+
 .subtitle {
   margin: 0 0 16px 0;
   font-size: 0.85rem;

@@ -7,18 +7,18 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 ## Features
 
 ### Visualization
-- **Live day/night visualization** with accurate subsolar point tracking
-- **Graduated twilight bands** instead of a hard terminator:
+- **Live day/night visualization** with accurate Sun tracking
+- **Smooth twilight gradient** instead of a hard terminator:
   - Civil twilight (sun 0° to −6° altitude)
   - Nautical twilight (sun −6° to −12°)
   - Astronomical twilight (sun −12° to −18°)
   - Night core (sun below −18°)
-- **Subsolar point marker** with label showing where the sun is directly overhead
+- **Sun marker** showing where the Sun is directly overhead
 - **Muted dark terrain-style base map** (Esri World Dark Gray Base + Boundaries & Places overlay) so the terminator stays the star
 
 ### Info panel
 - **UTC time** — current time (or time-travel time) in UTC
-- **Sun Overhead** — subsolar point coordinates in `NN.NN°N, EEE.EE°E` form
+- **Sun Overhead** — coordinates where the Sun is directly overhead, in `NN.NN°N, EEE.EE°E` form
 - **Solar Noon at Prime Meridian** — Greenwich solar noon in UTC (illustrates equation of time)
 - **Moon Phase** — current lunar phase name
 - **Location readout** — sunrise, sunset, and day length, shown in one of three modes:
@@ -27,8 +27,8 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
   - **Use My Location** button → times in the browser's local timezone (correct because the user is physically there)
 
 ### Controls
-- **Follow subsolar point** — auto-pans the map to keep the subsolar point centered. Auto-disables on manual pan/zoom, on city click, and on "Use My Location". Defaults *off* when a permalink with `lat`/`lon` is loaded, *on* otherwise.
-- **Show twilight** — toggle the four twilight bands on/off
+- **Follow Sun** — auto-pans the map to keep the Sun marker centered. Auto-disables on manual pan/zoom, on city click, and on "Use My Location". Defaults *off* so the first view stays a stable world map.
+- **Show twilight** — toggle the twilight/night overlay on/off
 - **Major cities** — toggle 15 major world city markers and labels. **Markers are clickable** — clicking a city recenters the map and shows that city's sunrise/sunset in the city's own timezone.
 
 ### Time travel
@@ -44,7 +44,7 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 - **Use My Location** button — uses `navigator.geolocation.getCurrentPosition` to center the map on the viewer's location and display their local sunrise/sunset in the browser's timezone. Handles permission-denied / unavailable / timeout with inline button feedback.
 
 ### Permalink state
-Share exact views with `?time=&lat=&lon=&zoom=`. See [Permalink Format](#permalink-format) below.
+Open the title to return to the clean root URL. Exact views can still be opened with `?time=&lat=&lon=&zoom=`. See [Permalink Format](#permalink-format) below.
 
 ## Tech Stack
 
@@ -142,12 +142,12 @@ https://daylight.forkstech.com/?time=2026-06-21T10:50:00.000Z&lat=47.6000&lon=-1
 | `lon`  | Map center longitude (east-positive). `0` is honored (not treated as missing). |
 | `zoom` | Leaflet zoom level (2–12). |
 
-When `lat`/`lon` are present, the **Follow subsolar point** control starts *off* so the shared view is preserved instead of being immediately panned away to the subsolar point.
+The **Follow Sun** control starts *off* so shared and first-load views are preserved instead of being immediately panned away to the Sun marker. Normal browsing keeps the address bar clean; map coordinates stay in the URL only when the page was opened as an explicit map view.
 
 ## Known Limitations
 
 - **Hover sunrise/sunset for arbitrary points are shown in UTC**, not in the hovered location's local civil time. True civil-time display for arbitrary lat/lng (not just known cities) would require a timezone lookup library (e.g. `tz-lookup`), which is not yet bundled. Click a major city or use "Use My Location" for local-time display.
-- **Subsolar point marker** is placed at the exact computed longitude; with `worldCopyJump: true` it may occasionally appear at the antimeridian edge during wrapping. The displayed coordinate is always in `[−180, 180]`.
+- **Sun marker** is placed at the exact computed longitude; with `worldCopyJump: true` it may occasionally appear at the antimeridian edge during wrapping. The displayed coordinate is always in `[−180, 180]`.
 - **Geolocation requires HTTPS and user permission.** On `http://` (e.g. local dev without TLS) or if the user denies the prompt, the button reports the error inline.
 
 ## License
