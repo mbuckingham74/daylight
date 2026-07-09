@@ -1,0 +1,13 @@
+services:
+  daylight-static:
+    image: nginx:alpine
+    container_name: daylight-static
+    restart: unless-stopped
+    volumes:
+      - ./html:/usr/share/nginx/html:ro
+    networks:
+      - npm_network
+
+networks:
+  npm_network:
+    external: true
