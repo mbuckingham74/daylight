@@ -90,8 +90,11 @@
   // world copies, and Web Mercator projection without hand-closing rings.
   const REFRACTION = 0.833;
   const DAY_COLOR = [255, 205, 92];
-  const TWILIGHT_COLOR = [5, 12, 30];
-  const NIGHT_COLOR = [1, 4, 14];
+  const CIVIL_TWILIGHT_COLOR = [52, 62, 96];
+  const NAUTICAL_TWILIGHT_COLOR = [25, 39, 82];
+  const ASTRONOMICAL_TWILIGHT_COLOR = [11, 19, 52];
+  const TWILIGHT_EDGE_COLOR = [92, 120, 190];
+  const NIGHT_COLOR = [1, 4, 16];
   const TWILIGHT_THRESHOLDS = {
     daylight: Math.sin(-REFRACTION * D2R),
     daylightGlow: Math.sin(18 * D2R),
@@ -117,6 +120,26 @@
     ];
   }
 
+  function accentTwilightBoundary(pixel, sinAltitude) {
+    const edgeWidth = Math.sin(1.15 * D2R);
+    const boundaries = [
+      TWILIGHT_THRESHOLDS.civil,
+      TWILIGHT_THRESHOLDS.nautical,
+      TWILIGHT_THRESHOLDS.astronomical
+    ];
+    const accent = boundaries.reduce((strongest, boundary) => {
+      const distance = Math.abs(sinAltitude - boundary);
+      return Math.max(strongest, 1 - smoothstep(0, edgeWidth, distance));
+    }, 0);
+
+    if (accent <= 0) return pixel;
+
+    return {
+      color: mixColor(pixel.color, TWILIGHT_EDGE_COLOR, 0.38 * accent),
+      alpha: Math.min(190, Math.round(pixel.alpha + 30 * accent))
+    };
+  }
+
   function getSunRenderState(date) {
     const subsolar = getSubsolarPoint(date);
     const declination = subsolar.lat * D2R;
@@ -137,20 +160,24 @@
 
     if (sinAltitude >= TWILIGHT_THRESHOLDS.civil) {
       const amount = smoothstep(TWILIGHT_THRESHOLDS.daylight, TWILIGHT_THRESHOLDS.civil, sinAltitude);
-      return { color: TWILIGHT_COLOR, alpha: Math.round(32 + 24 * amount) };
+      const pixel = { color: CIVIL_TWILIGHT_COLOR, alpha: Math.round(42 + 30 * amount) };
+      return accentTwilightBoundary(pixel, sinAltitude);
     }
 
+    let pixel;
     if (sinAltitude >= TWILIGHT_THRESHOLDS.nautical) {
       const amount = smoothstep(TWILIGHT_THRESHOLDS.civil, TWILIGHT_THRESHOLDS.nautical, sinAltitude);
-      return { color: mixColor(TWILIGHT_COLOR, NIGHT_COLOR, 0.25), alpha: Math.round(68 + 26 * amount) };
+      pixel = { color: NAUTICAL_TWILIGHT_COLOR, alpha: Math.round(88 + 32 * amount) };
+      return accentTwilightBoundary(pixel, sinAltitude);
     }
 
     if (sinAltitude >= TWILIGHT_THRESHOLDS.astronomical) {
       const amount = smoothstep(TWILIGHT_THRESHOLDS.nautical, TWILIGHT_THRESHOLDS.astronomical, sinAltitude);
-      return { color: mixColor(TWILIGHT_COLOR, NIGHT_COLOR, 0.6), alpha: Math.round(106 + 30 * amount) };
+      pixel = { color: ASTRONOMICAL_TWILIGHT_COLOR, alpha: Math.round(132 + 34 * amount) };
+      return accentTwilightBoundary(pixel, sinAltitude);
     }
 
-    return { color: NIGHT_COLOR, alpha: 156 };
+    return { color: NIGHT_COLOR, alpha: 178 };
   }
 
   function getSolarSinAltitude(date, lat, lng) {
