@@ -95,6 +95,8 @@
   const TWILIGHT_THRESHOLDS = {
     daylight: Math.sin(-REFRACTION * D2R),
     daylightGlow: Math.sin(18 * D2R),
+    civil: Math.sin(-6 * D2R),
+    nautical: Math.sin(-12 * D2R),
     astronomical: Math.sin(-18 * D2R)
   };
 
@@ -129,18 +131,26 @@
   function getTwilightPixel(sinAltitude) {
     if (sinAltitude >= TWILIGHT_THRESHOLDS.daylight) {
       const glow = smoothstep(TWILIGHT_THRESHOLDS.daylight, TWILIGHT_THRESHOLDS.daylightGlow, sinAltitude);
-      const alpha = Math.round(10 * glow);
+      const alpha = Math.round(6 * glow);
       return alpha > 0 ? { color: DAY_COLOR, alpha } : null;
     }
 
-    const nightAmount = smoothstep(
-      TWILIGHT_THRESHOLDS.daylight,
-      TWILIGHT_THRESHOLDS.astronomical,
-      sinAltitude
-    );
-    const color = mixColor(TWILIGHT_COLOR, NIGHT_COLOR, nightAmount);
-    const alpha = Math.round(12 + 104 * nightAmount);
-    return { color, alpha };
+    if (sinAltitude >= TWILIGHT_THRESHOLDS.civil) {
+      const amount = smoothstep(TWILIGHT_THRESHOLDS.daylight, TWILIGHT_THRESHOLDS.civil, sinAltitude);
+      return { color: TWILIGHT_COLOR, alpha: Math.round(32 + 24 * amount) };
+    }
+
+    if (sinAltitude >= TWILIGHT_THRESHOLDS.nautical) {
+      const amount = smoothstep(TWILIGHT_THRESHOLDS.civil, TWILIGHT_THRESHOLDS.nautical, sinAltitude);
+      return { color: mixColor(TWILIGHT_COLOR, NIGHT_COLOR, 0.25), alpha: Math.round(68 + 26 * amount) };
+    }
+
+    if (sinAltitude >= TWILIGHT_THRESHOLDS.astronomical) {
+      const amount = smoothstep(TWILIGHT_THRESHOLDS.nautical, TWILIGHT_THRESHOLDS.astronomical, sinAltitude);
+      return { color: mixColor(TWILIGHT_COLOR, NIGHT_COLOR, 0.6), alpha: Math.round(106 + 30 * amount) };
+    }
+
+    return { color: NIGHT_COLOR, alpha: 156 };
   }
 
   function getSolarSinAltitude(date, lat, lng) {
