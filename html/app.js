@@ -394,17 +394,14 @@
     return new Date(manualTime.getTime() + sliderOffsetHours * 3600000);
   }
 
+  // The subsolar marker and label are always on the map — the "Follow
+  // subsolar point" toggle only controls auto-panning, not visibility.
   function setFollowSun(enabled) {
     followSun = enabled;
     followSunCheckbox.checked = enabled;
     if (followSun) {
-      subsolarMarker.addTo(map);
-      subsolarLabel.addTo(map);
       const subsolar = getSubsolarPoint(currentTime());
       map.panTo([subsolar.lat, subsolar.lng], { animate: true, duration: 0.8 });
-    } else {
-      map.removeLayer(subsolarMarker);
-      map.removeLayer(subsolarLabel);
     }
   }
 
