@@ -34,20 +34,38 @@
       </div>
     </div>
 
-    <div class="location" id="location-info">
+    <div class="location browser-location-card" id="browser-location-info">
       <div class="location-header">
-        <h2>Hover a location</h2>
+        <h2>Browser Location</h2>
         <button id="my-location-btn" type="button" title="Center the map on your current location">Use My Location</button>
       </div>
       <div class="browser-location" aria-live="polite">
         <div class="stat">
-          <span class="stat-label">Browser Timezone</span>
+          <span class="stat-label">Timezone</span>
           <span class="stat-value" id="browser-timezone">--</span>
         </div>
         <div class="stat">
           <span class="stat-label">Nearest City</span>
           <span class="stat-value" id="browser-nearest-city">--</span>
         </div>
+        <div class="stat">
+          <span class="stat-label">Local Sunrise</span>
+          <span class="stat-value" id="browser-sunrise">--</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Local Sunset</span>
+          <span class="stat-value" id="browser-sunset">--</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Day Length</span>
+          <span class="stat-value" id="browser-daylength">--</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="location" id="location-info">
+      <div class="location-header">
+        <h2>Map Point</h2>
       </div>
       <div class="stat">
         <span class="stat-label">Coordinates</span>
@@ -100,6 +118,6 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
-  <script src="app.js?v=20260709i"></script>
+  <script src="app.js?v=20260709j"></script>
 </body>
 </html>

@@ -25,7 +25,7 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
   - **Hover any point** on the map → times in UTC (timezone-independent, always correct)
   - **Click a major city marker** → times in that city's IANA timezone (e.g. `05:21 PDT` for Seattle, `04:54 BST` for London)
   - **Use My Location** button → times in the browser's local timezone (correct because the user is physically there)
-- **Browser location context** — displays the browser's IANA timezone immediately, and fills the nearest major city when geolocation is already granted or when the viewer clicks **Use My Location**.
+- **Browser location context** — displays the browser's IANA timezone immediately, and fills the nearest major city plus local sunrise/sunset/day length when geolocation is already granted or when the viewer clicks **Use My Location**.
 
 ### Controls
 - **Follow Sun** — auto-pans the map to keep the Sun marker centered. Auto-disables on manual pan/zoom, on city click, and on "Use My Location". Defaults *off* so the first view stays a stable world map.
@@ -45,6 +45,7 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 ### Location
 - **Use My Location** button — uses `navigator.geolocation.getCurrentPosition` to center the map on the viewer's location and display their local sunrise/sunset in the browser's timezone. Handles permission-denied / unavailable / timeout with inline button feedback.
 - **Nearest city** — computed client-side from geolocation against a bundled list of major cities, so no external geocoding service is required.
+- **Map point card** — hover/click sunrise and sunset are separate from the browser-location card, so polar hover data cannot be confused with the viewer's local daylight.
 
 ### Permalink state
 Open the title to return to the clean root URL. Exact views can still be opened with `?time=&lat=&lon=&zoom=`. See [Permalink Format](#permalink-format) below.

@@ -483,16 +483,17 @@
 
     const moonIllum = SunCalc.getMoonIllumination(date);
     document.getElementById('moon-phase').textContent = getMoonPhaseName(moonIllum.phase);
+    updateBrowserLocalSunReadout(date);
   }
 
-  function updateHover(latlng) {
+  function updateHover(latlng, label = 'Hovered map point') {
     const lat = latlng.lat;
     const lng = (((latlng.lng + 180) % 360 + 360) % 360) - 180;
     const now = currentTime();
     const times = SunCalc.getTimes(now, lat, lng);
     const hasSunTimes = isValidDate(times.sunrise) && isValidDate(times.sunset);
 
-    document.getElementById('location-info').querySelector('h2').textContent = 'Hover a location';
+    document.getElementById('location-info').querySelector('h2').textContent = label;
     document.getElementById('hover-coords').textContent = formatCoord(lat, lng);
 
     if (hasSunTimes) {
@@ -542,6 +543,8 @@
     }
   }
 
+  let browserLocation = null;
+
   function getBrowserTimeZone() {
     try {
       return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
@@ -583,8 +586,39 @@
     return nearestCity;
   }
 
+  function resetBrowserLocalSunReadout() {
+    document.getElementById('browser-sunrise').textContent = '--';
+    document.getElementById('browser-sunset').textContent = '--';
+    document.getElementById('browser-daylength').textContent = '--';
+  }
+
+  function updateBrowserLocalSunReadout(date = currentTime()) {
+    if (!browserLocation) {
+      resetBrowserLocalSunReadout();
+      return;
+    }
+
+    const times = SunCalc.getTimes(date, browserLocation.lat, browserLocation.lng);
+    const hasSunTimes = isValidDate(times.sunrise) && isValidDate(times.sunset);
+    const tzSuffix = browserLocation.timeZone ? ' ' + getTimeZoneAbbr(browserLocation.timeZone) : ' UTC';
+
+    if (hasSunTimes) {
+      document.getElementById('browser-sunrise').textContent = formatTimeTz(times.sunrise, browserLocation.timeZone) + tzSuffix;
+      document.getElementById('browser-sunset').textContent = formatTimeTz(times.sunset, browserLocation.timeZone) + tzSuffix;
+      document.getElementById('browser-daylength').textContent = formatDuration((times.sunset - times.sunrise) / 1000);
+      return;
+    }
+
+    const isDaylight = getSolarSinAltitude(date, browserLocation.lat, browserLocation.lng) >= TWILIGHT_THRESHOLDS.daylight;
+    document.getElementById('browser-sunrise').textContent = 'No sunrise';
+    document.getElementById('browser-sunset').textContent = 'No sunset';
+    document.getElementById('browser-daylength').textContent = formatPolarDayLength(isDaylight);
+  }
+
   function setBrowserNearestCityStatus(status) {
     document.getElementById('browser-nearest-city').textContent = status;
+    browserLocation = null;
+    resetBrowserLocalSunReadout();
   }
 
   function requestBrowserLocation(options = {}) {
@@ -611,6 +645,13 @@
         const lng = pos.coords.longitude;
         const tz = updateBrowserTimezoneReadout();
         const nearestCity = updateBrowserNearestCityReadout(lat, lng);
+        browserLocation = {
+          lat,
+          lng,
+          timeZone: tz,
+          label: nearestCity ? nearestCity.name : 'Your location'
+        };
+        updateBrowserLocalSunReadout();
 
         if (updateButton) {
           myLocationBtn.disabled = false;
@@ -623,7 +664,7 @@
         }
 
         if (showTimes) {
-          showLocationTimes(lat, lng, nearestCity ? nearestCity.name : 'Your location', tz);
+          showLocationTimes(lat, lng, browserLocation.label, tz);
         }
       },
       function (err) {
@@ -680,7 +721,7 @@
     // City marker clicks are handled by the marker's own click handler
     // (with stopPropagation); this handles clicks on the open map only.
     if (e.sourceTarget && e.sourceTarget instanceof L.CircleMarker) return;
-    updateHover(e.latlng);
+    updateHover(e.latlng, 'Selected map point');
   });
 
   // "Use My Location" — browser geolocation. Times display in the browser's
