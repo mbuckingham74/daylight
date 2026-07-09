@@ -76,11 +76,17 @@
     return { lat: sun.delta, lng };
   }
 
+  // Wrap longitude to [-180, 180)
+  function wrapLng(lng) {
+    return ((lng + 540) % 360) - 180;
+  }
+
   // Generate points along a geodesic circle on the sphere.
+  // All output longitudes are normalized to [-180, 180).
   function geodesicCircle(lat0, lng0, radiusDeg, numPoints) {
     const points = [];
     const lat0r = lat0 * D2R;
-    const lon0r = lng0 * D2R;
+    const lon0r = wrapLng(lng0) * D2R;
     const dr = radiusDeg * D2R;
 
     for (let i = 0; i <= numPoints; i++) {
@@ -91,39 +97,87 @@
         Math.sin(bearing) * Math.sin(dr) * Math.cos(lat0r),
         Math.cos(dr) - Math.sin(lat0r) * Math.sin(lat)
       );
-      points.push([lat * R2D, lon * R2D]);
+      points.push([lat * R2D, wrapLng(lon * R2D)]);
     }
 
     return points;
   }
 
-  // Build a twilight band polygon. Bands are geodesic rings/caps centered on
+  // Split a ring of [lat, lng] points at antimeridian crossings into
+  // multiple segments, each with continuous longitudes in [-180, 180].
+  // Interpolates the latitude at the crossing so each segment closes properly.
+  // Returns an array of rings (each ring is an array of [lat, lng] points).
+  function splitAtAntimeridian(ring) {
+    if (ring.length < 2) return [ring];
+    const segments = [];
+    let current = [ring[0]];
+
+    for (let i = 1; i < ring.length; i++) {
+      const prev = ring[i - 1];
+      const curr = ring[i];
+      const dLng = curr[1] - prev[1];
+
+      if (Math.abs(dLng) > 180) {
+        // Antimeridian crossing — interpolate latitude at ±180°
+        let frac, sign;
+        if (dLng < -180) {
+          // Going east: prev near +180, curr near -180
+          const unwrappedCurr = curr[1] + 360;
+          frac = (180 - prev[1]) / (unwrappedCurr - prev[1]);
+          sign = 180;  // current segment ends at +180
+        } else {
+          // Going west: prev near -180, curr near +180
+          const unwrappedCurr = curr[1] - 360;
+          frac = (-180 - prev[1]) / (unwrappedCurr - prev[1]);
+          sign = -180;  // current segment ends at -180
+        }
+        frac = Math.max(0, Math.min(1, frac));
+        const latAtMeridian = prev[0] + frac * (curr[0] - prev[0]);
+        current.push([latAtMeridian, sign]);
+        segments.push(current);
+        current = [[latAtMeridian, -sign], curr];
+      } else {
+        current.push(curr);
+      }
+    }
+    segments.push(current);
+
+    return segments;
+  }
+
+  // Build twilight band polygon(s). Bands are geodesic rings/caps centered on
   // the antisolar point. Angular radius from antipode = 90° + altitude.
+  // Returns an array of rings suitable for L.polygon multipolygon rendering.
   function computeTwilightBand(date, rOuter, rInner, isCap) {
     const subsolar = getSubsolarPoint(date);
-    const antipode = [-subsolar.lat, subsolar.lng + 180];
+    const antipodeLat = -subsolar.lat;
+    const antipodeLng = wrapLng(subsolar.lng + 180);
     const poleLat = subsolar.lat > 0 ? -90 : 90;
 
-    const outer = geodesicCircle(antipode[0], antipode[1], rOuter, 180);
+    const outer = geodesicCircle(antipodeLat, antipodeLng, rOuter, 180);
 
     if (isCap) {
-      // Night core: filled cap from outer boundary to pole
-      return outer.concat([[poleLat, antipode[1] + 180]]);
+      // Night core: outer circle + pole point to close the cap
+      const fullRing = outer.concat([[poleLat, antipodeLng]]);
+      return splitAtAntimeridian(fullRing);
     }
 
-    const inner = geodesicCircle(antipode[0], antipode[1], rInner, 180);
-    // Ring around the pole: outer clockwise, inner counter-clockwise,
-    // connected via the pole.
-    return outer
-      .concat([[poleLat, antipode[1] + 180]])
-      .concat(inner.reverse())
-      .concat([[poleLat, antipode[1]]]);
+    const inner = geodesicCircle(antipodeLat, antipodeLng, rInner, 180);
+    // Ring: outer circle → pole → inner circle (reversed) → pole
+    const fullRing = outer
+      .concat([[poleLat, antipodeLng]])
+      .concat(inner.slice().reverse())
+      .concat([[poleLat, antipodeLng]]);
+    return splitAtAntimeridian(fullRing);
   }
 
   // Twilight band layers (from lightest to darkest). Angular radii are measured
   // from the antisolar point: radius = 90° + solar altitude.
+  // The outermost boundary uses -0.833° (standard refraction + solar disk)
+  // so the daylight/twilight line matches observed sunrise/sunset.
+  const REFRACTION = 0.833;
   const twilightDefs = [
-    { rOuter: 90, rInner: 84, fillOpacity: 0.08, color: '#030816' },
+    { rOuter: 90 - REFRACTION, rInner: 84, fillOpacity: 0.08, color: '#030816' },
     { rOuter: 84, rInner: 78, fillOpacity: 0.12, color: '#030816' },
     { rOuter: 78, rInner: 72, fillOpacity: 0.18, color: '#030816' },
     { rOuter: 72, rInner: 0, fillOpacity: 0.40, color: '#020612', isCap: true }
@@ -142,8 +196,9 @@
 
   function updateTwilight(date) {
     twilightDefs.forEach((def, i) => {
-      const ring = computeTwilightBand(date, def.rOuter, def.rInner, def.isCap);
-      twilightLayers[i].setLatLngs([ring]);
+      const rings = computeTwilightBand(date, def.rOuter, def.rInner, def.isCap);
+      // setLatLngs with multipolygon format: [[ring1], [ring2], ...]
+      twilightLayers[i].setLatLngs(rings.map(r => [r]));
     });
   }
 
