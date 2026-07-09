@@ -35,7 +35,10 @@
     </div>
 
     <div class="location" id="location-info">
-      <h2>Hover a location</h2>
+      <div class="location-header">
+        <h2>Hover a location</h2>
+        <button id="my-location-btn" type="button" title="Center the map on your current location">Use My Location</button>
+      </div>
       <div class="stat">
         <span class="stat-label">Coordinates</span>
         <span class="stat-value" id="hover-coords">--</span>
@@ -56,7 +59,7 @@
 
     <div class="controls">
       <label>
-        <input type="checkbox" id="follow-sun" checked />
+        <input type="checkbox" id="follow-sun" />
         Follow subsolar point
       </label>
       <label>

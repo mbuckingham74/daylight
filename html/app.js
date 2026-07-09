@@ -11,7 +11,7 @@
   const initialLng = parseFloat(urlParams.get('lon'));
   const initialZoom = parseInt(urlParams.get('zoom'), 10);
 
-  const mapCenter = (initialLat && initialLng) ? [initialLat, initialLng] : [20, 0];
+  const mapCenter = (!isNaN(initialLat) && !isNaN(initialLng)) ? [initialLat, initialLng] : [20, 0];
   const mapZoom = initialZoom || 3;
 
   const map = L.map('map', {
@@ -72,7 +72,7 @@
   function getSubsolarPoint(date) {
     const sun = getSunEquatorial(date);
     let lng = sun.alpha - sun.gmstDeg;
-    lng = ((lng + 180) % 360) - 180;
+    lng = ((lng + 540) % 360) - 180;
     return { lat: sun.delta, lng };
   }
 
@@ -166,21 +166,21 @@
     .setLatLng([0, 0]);
 
   const cities = [
-    { name: 'London', lat: 51.5074, lng: -0.1278 },
-    { name: 'New York', lat: 40.7128, lng: -74.0060 },
-    { name: 'Tokyo', lat: 35.6762, lng: 139.6503 },
-    { name: 'Sydney', lat: -33.8688, lng: 151.2093 },
-    { name: 'São Paulo', lat: -23.5505, lng: -46.6333 },
-    { name: 'Cairo', lat: 30.0444, lng: 31.2357 },
-    { name: 'Mumbai', lat: 19.0760, lng: 72.8777 },
-    { name: 'Singapore', lat: 1.3521, lng: 103.8198 },
-    { name: 'Los Angeles', lat: 34.0522, lng: -118.2437 },
-    { name: 'Paris', lat: 48.8566, lng: 2.3522 },
-    { name: 'Moscow', lat: 55.7558, lng: 37.6173 },
-    { name: 'Beijing', lat: 39.9042, lng: 116.4074 },
-    { name: 'Johannesburg', lat: -26.2041, lng: 28.0473 },
-    { name: 'Dubai', lat: 25.2048, lng: 55.2708 },
-    { name: 'Bangkok', lat: 13.7563, lng: 100.5018 }
+    { name: 'London', lat: 51.5074, lng: -0.1278, tz: 'Europe/London' },
+    { name: 'New York', lat: 40.7128, lng: -74.0060, tz: 'America/New_York' },
+    { name: 'Tokyo', lat: 35.6762, lng: 139.6503, tz: 'Asia/Tokyo' },
+    { name: 'Sydney', lat: -33.8688, lng: 151.2093, tz: 'Australia/Sydney' },
+    { name: 'São Paulo', lat: -23.5505, lng: -46.6333, tz: 'America/Sao_Paulo' },
+    { name: 'Cairo', lat: 30.0444, lng: 31.2357, tz: 'Africa/Cairo' },
+    { name: 'Mumbai', lat: 19.0760, lng: 72.8777, tz: 'Asia/Kolkata' },
+    { name: 'Singapore', lat: 1.3521, lng: 103.8198, tz: 'Asia/Singapore' },
+    { name: 'Los Angeles', lat: 34.0522, lng: -118.2437, tz: 'America/Los_Angeles' },
+    { name: 'Paris', lat: 48.8566, lng: 2.3522, tz: 'Europe/Paris' },
+    { name: 'Moscow', lat: 55.7558, lng: 37.6173, tz: 'Europe/Moscow' },
+    { name: 'Beijing', lat: 39.9042, lng: 116.4074, tz: 'Asia/Shanghai' },
+    { name: 'Johannesburg', lat: -26.2041, lng: 28.0473, tz: 'Africa/Johannesburg' },
+    { name: 'Dubai', lat: 25.2048, lng: 55.2708, tz: 'Asia/Dubai' },
+    { name: 'Bangkok', lat: 13.7563, lng: 100.5018, tz: 'Asia/Bangkok' }
   ];
 
   let cityLayer = L.layerGroup().addTo(map);
@@ -188,14 +188,21 @@
   function renderCities() {
     cityLayer.clearLayers();
     cities.forEach(city => {
-      L.circleMarker([city.lat, city.lng], {
-        radius: 3,
+      const marker = L.circleMarker([city.lat, city.lng], {
+        radius: 4,
         fillColor: '#5b8cff',
         color: '#ffffff',
         weight: 1,
         opacity: 0.8,
         fillOpacity: 0.9
       }).addTo(cityLayer);
+
+      marker.on('click', function (e) {
+        L.DomEvent.stopPropagation(e);
+        map.panTo([city.lat, city.lng], { animate: true, duration: 0.8 });
+        setFollowSun(false);
+        showLocationTimes(city.lat, city.lng, city.name, city.tz);
+      });
 
       L.tooltip({
         permanent: true,
@@ -218,7 +225,17 @@
 
   function formatTime(date) {
     if (!date || isNaN(date.getTime())) return '--:--';
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
+  }
+
+  function formatTimeTz(date, timeZone) {
+    if (!date || isNaN(date.getTime())) return '--:--';
+    if (!timeZone) return formatTime(date);
+    try {
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone });
+    } catch (e) {
+      return formatTime(date);
+    }
   }
 
   function formatDuration(seconds) {
@@ -228,8 +245,8 @@
     return `${h}h ${m}m`;
   }
 
-  function getMoonPhaseName(fraction) {
-    const age = fraction * 29.53;
+  function getMoonPhaseName(phase) {
+    const age = phase * 29.53;
     if (age < 1) return 'New Moon';
     if (age < 7) return 'Waxing Crescent';
     if (age < 8) return 'First Quarter';
@@ -249,41 +266,61 @@
     subsolarLabel.setLatLng([subsolar.lat, subsolar.lng]);
 
     document.getElementById('utc-time').textContent = date.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
-    document.getElementById('sun-position').textContent = `${subsolar.lat.toFixed(2)}°, ${subsolar.lng.toFixed(2)}°`;
+    document.getElementById('sun-position').textContent = formatCoord(subsolar.lat, subsolar.lng);
 
     const greenwich = SunCalc.getTimes(date, 51.4769, -0.0005);
     const solarNoon = greenwich.solarNoon;
     document.getElementById('solar-noon').textContent = solarNoon && !isNaN(solarNoon) ? formatTime(solarNoon) + ' UTC' : '--:--';
 
     const moonIllum = SunCalc.getMoonIllumination(date);
-    document.getElementById('moon-phase').textContent = getMoonPhaseName(moonIllum.fraction);
+    document.getElementById('moon-phase').textContent = getMoonPhaseName(moonIllum.phase);
   }
-
-  let hoverPopup = null;
 
   function updateHover(latlng) {
     const lat = latlng.lat;
-    const lng = ((latlng.lng + 180) % 360) - 180;
+    const lng = (((latlng.lng + 180) % 360 + 360) % 360) - 180;
     const now = currentTime();
     const times = SunCalc.getTimes(now, lat, lng);
 
+    document.getElementById('location-info').querySelector('h2').textContent = 'Hover a location';
     document.getElementById('hover-coords').textContent = formatCoord(lat, lng);
-    document.getElementById('hover-sunrise').textContent = formatTime(times.sunrise) + ' local';
-    document.getElementById('hover-sunset').textContent = formatTime(times.sunset) + ' local';
+    document.getElementById('hover-sunrise').textContent = formatTime(times.sunrise) + ' UTC';
+    document.getElementById('hover-sunset').textContent = formatTime(times.sunset) + ' UTC';
 
     let dayLength = 0;
     if (times.sunset && times.sunrise && !isNaN(times.sunset) && !isNaN(times.sunrise)) {
       dayLength = (times.sunset - times.sunrise) / 1000;
     }
     document.getElementById('hover-daylength').textContent = formatDuration(dayLength);
+  }
 
-    if (hoverPopup) {
-      map.closePopup(hoverPopup);
+  // Show sunrise/sunset for a known location (city or "my location") in its
+  // own IANA timezone. Falls back to UTC if no timezone is provided.
+  function showLocationTimes(lat, lng, label, timeZone) {
+    const now = currentTime();
+    const times = SunCalc.getTimes(now, lat, lng);
+
+    document.getElementById('location-info').querySelector('h2').textContent = label;
+    document.getElementById('hover-coords').textContent = formatCoord(lat, lng);
+    const tzSuffix = timeZone ? ' ' + getTimeZoneAbbr(timeZone) : ' UTC';
+    document.getElementById('hover-sunrise').textContent = formatTimeTz(times.sunrise, timeZone) + tzSuffix;
+    document.getElementById('hover-sunset').textContent = formatTimeTz(times.sunset, timeZone) + tzSuffix;
+
+    let dayLength = 0;
+    if (times.sunset && times.sunrise && !isNaN(times.sunset) && !isNaN(times.sunrise)) {
+      dayLength = (times.sunset - times.sunrise) / 1000;
     }
-    hoverPopup = L.popup({ autoClose: false, closeOnClick: false })
-      .setLatLng(latlng)
-      .setContent(`<strong>${formatCoord(lat, lng)}</strong><br>Sunrise: ${formatTime(times.sunrise)}<br>Sunset: ${formatTime(times.sunset)}<br>Daylight: ${formatDuration(dayLength)}`)
-      .openOn(map);
+    document.getElementById('hover-daylength').textContent = formatDuration(dayLength);
+  }
+
+  function getTimeZoneAbbr(timeZone) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'short' }).formatToParts(new Date());
+      const tzPart = parts.find(p => p.type === 'timeZoneName');
+      return tzPart ? tzPart.value : '';
+    } catch (e) {
+      return '';
+    }
   }
 
   let lastHover = null;
@@ -295,7 +332,47 @@
   });
 
   map.on('click', function (e) {
+    // City marker clicks are handled by the marker's own click handler
+    // (with stopPropagation); this handles clicks on the open map only.
+    if (e.sourceTarget && e.sourceTarget instanceof L.CircleMarker) return;
     updateHover(e.latlng);
+  });
+
+  // "Use My Location" — browser geolocation. Times display in the browser's
+  // local timezone, which is correct because the user is physically there.
+  const myLocationBtn = document.getElementById('my-location-btn');
+  myLocationBtn.addEventListener('click', function () {
+    if (!navigator.geolocation) {
+      myLocationBtn.textContent = 'Unsupported';
+      setTimeout(() => { myLocationBtn.textContent = 'Use My Location'; }, 2000);
+      return;
+    }
+    myLocationBtn.disabled = true;
+    myLocationBtn.textContent = 'Locating…';
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        myLocationBtn.disabled = false;
+        myLocationBtn.textContent = 'Use My Location';
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setFollowSun(false);
+        map.panTo([lat, lng], { animate: true, duration: 0.8 });
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+        showLocationTimes(lat, lng, 'Your location', tz);
+      },
+      function (err) {
+        myLocationBtn.disabled = false;
+        myLocationBtn.textContent = 'Use My Location';
+        const messages = {
+          1: 'Location permission denied.',
+          2: 'Location unavailable.',
+          3: 'Location request timed out.'
+        };
+        myLocationBtn.textContent = messages[err.code] || 'Location error';
+        setTimeout(() => { myLocationBtn.textContent = 'Use My Location'; }, 2500);
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+    );
   });
 
   // UI controls
@@ -307,13 +384,14 @@
   const liveBtn = document.getElementById('live-btn');
   const presetBtns = document.querySelectorAll('[data-preset]');
 
-  let followSun = true;
+  let followSun = !isNaN(initialLat) && !isNaN(initialLng) ? false : true;
   let isLive = !initialTime;
   let manualTime = initialTime ? new Date(initialTime.getTime()) : new Date();
   let sliderOffsetHours = 0;
 
   function currentTime() {
-    return isLive ? new Date() : new Date(manualTime.getTime());
+    if (isLive) return new Date();
+    return new Date(manualTime.getTime() + sliderOffsetHours * 3600000);
   }
 
   function setFollowSun(enabled) {
@@ -345,7 +423,6 @@
   const twilightOpacities = twilightDefs.map(def => def.fillOpacity);
   showTerminatorCheckbox.addEventListener('change', function () {
     const visible = this.checked;
-    terminator.setStyle({ fillOpacity: 0 });
     twilightLayers.forEach((layer, i) => {
       layer.setStyle({ fillOpacity: visible ? twilightOpacities[i] : 0 });
     });
@@ -359,19 +436,9 @@
     }
   });
 
-  // Time slider: range -12 to +12 hours from current moment
-  function updateSliderFromTime() {
-    const now = new Date();
-    const target = currentTime();
-    const diffMs = target.getTime() - now.getTime();
-    sliderOffsetHours = diffMs / 3600000;
-    // Clamp to slider range
-    if (sliderOffsetHours < -12) sliderOffsetHours = -12;
-    if (sliderOffsetHours > 12) sliderOffsetHours = 12;
-    timeSlider.value = sliderOffsetHours;
-    updateSliderLabel();
-  }
-
+  // Time slider: ±12 hours around the current manualTime anchor.
+  // The anchor is set when a preset is chosen or when the user first drags
+  // the slider from live mode. This makes presets and the slider compose.
   function updateSliderLabel() {
     const target = currentTime();
     if (isLive) {
@@ -381,12 +448,21 @@
     }
   }
 
+  function resetSliderToCenter() {
+    sliderOffsetHours = 0;
+    timeSlider.value = 0;
+    updateSliderLabel();
+  }
+
   let sliderRaf = null;
   timeSlider.addEventListener('input', function () {
-    isLive = false;
+    if (isLive) {
+      // Freeze the anchor at the current live moment before applying offset
+      manualTime = new Date();
+      isLive = false;
+      liveBtn.classList.remove('active');
+    }
     sliderOffsetHours = parseFloat(this.value);
-    manualTime = new Date(Date.now() + sliderOffsetHours * 3600000);
-    liveBtn.classList.remove('active');
     updateSliderLabel();
     updatePermalink();
     if (sliderRaf) cancelAnimationFrame(sliderRaf);
@@ -398,7 +474,10 @@
 
   liveBtn.addEventListener('click', function () {
     isLive = true;
-    updateSliderFromTime();
+    manualTime = new Date();
+    sliderOffsetHours = 0;
+    timeSlider.value = 0;
+    updateSliderLabel();
     update(currentTime());
     liveBtn.classList.add('active');
     updatePermalink();
@@ -417,8 +496,10 @@
       if (presets[key]) {
         isLive = false;
         manualTime = new Date(presets[key].getTime());
+        sliderOffsetHours = 0;
+        timeSlider.value = 0;
         liveBtn.classList.remove('active');
-        updateSliderFromTime();
+        updateSliderLabel();
         update(currentTime());
         updatePermalink();
       }
@@ -452,7 +533,7 @@
     update(now);
 
     if (isLive) {
-      updateSliderFromTime();
+      updateSliderLabel();
     }
 
     if (followSun) {
@@ -468,9 +549,11 @@
 
   update(currentTime());
   subsolarLabel.addTo(map);
-  updateSliderFromTime();
+  timeSlider.value = 0;
+  updateSliderLabel();
   if (initialTime) {
     liveBtn.classList.remove('active');
   }
+  followSunCheckbox.checked = followSun;
   setInterval(tick, 1000);
 })();

@@ -86,11 +86,47 @@ html, body {
   margin-bottom: 18px;
 }
 
+.location-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 .location h2 {
-  margin: 0 0 12px 0;
+  margin: 0;
   font-size: 0.9rem;
   font-weight: 600;
   color: #c6cbda;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#my-location-btn {
+  background: rgba(91, 140, 255, 0.15);
+  border: 1px solid rgba(91, 140, 255, 0.4);
+  color: #5b8cff;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+#my-location-btn:hover:not(:disabled) {
+  background: rgba(91, 140, 255, 0.28);
+}
+
+#my-location-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
 }
 
 .controls {

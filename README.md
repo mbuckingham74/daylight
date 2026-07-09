@@ -6,44 +6,84 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 
 ## Features
 
+### Visualization
 - **Live day/night visualization** with accurate subsolar point tracking
 - **Graduated twilight bands** instead of a hard terminator:
-  - Civil twilight
-  - Nautical twilight
-  - Astronomical twilight
-  - Night core
-- **Time travel** — drag through 24 hours or jump to solstices/equinoxes
-- **Permalink state** — share exact views with `?time=&lat=&lon=&zoom=`
-- **Interactive location data** — hover or click anywhere for local sunrise, sunset, and day length
-- **Follow subsolar point** mode that automatically pans the map (disables on manual interaction)
-- **Muted terrain-style base map** so the terminator stays the star
+  - Civil twilight (sun 0° to −6° altitude)
+  - Nautical twilight (sun −6° to −12°)
+  - Astronomical twilight (sun −12° to −18°)
+  - Night core (sun below −18°)
+- **Subsolar point marker** with label showing where the sun is directly overhead
+- **Muted dark terrain-style base map** (Esri World Dark Gray Base + Boundaries & Places overlay) so the terminator stays the star
+
+### Info panel
+- **UTC time** — current time (or time-travel time) in UTC
+- **Sun Overhead** — subsolar point coordinates in `NN.NN°N, EEE.EE°E` form
+- **Solar Noon at Prime Meridian** — Greenwich solar noon in UTC (illustrates equation of time)
+- **Moon Phase** — current lunar phase name
+- **Location readout** — sunrise, sunset, and day length, shown in one of three modes:
+  - **Hover any point** on the map → times in UTC (timezone-independent, always correct)
+  - **Click a major city marker** → times in that city's IANA timezone (e.g. `05:21 PDT` for Seattle, `04:54 BST` for London)
+  - **Use My Location** button → times in the browser's local timezone (correct because the user is physically there)
+
+### Controls
+- **Follow subsolar point** — auto-pans the map to keep the subsolar point centered. Auto-disables on manual pan/zoom, on city click, and on "Use My Location". Defaults *off* when a permalink with `lat`/`lon` is loaded, *on* otherwise.
+- **Show twilight** — toggle the four twilight bands on/off
+- **Major cities** — toggle 15 major world city markers and labels. **Markers are clickable** — clicking a city recenters the map and shows that city's sunrise/sunset in the city's own timezone.
+
+### Time travel
+- **Live button** — return to real-time tracking
+- **±12-hour slider** — scrubs ±12 hours around the current time-travel anchor (which is either "now" in live mode, or the selected preset). The slider and presets compose: clicking a preset sets the anchor, then dragging the slider scrubs around that anchor without jumping back to "now".
+- **Solstice / equinox presets** — jump to:
+  - March equinox 2026 (2026-03-20T14:46:00Z)
+  - June solstice 2026 (2026-06-21T10:50:00Z)
+  - September equinox 2026 (2026-09-23T02:19:00Z)
+  - December solstice 2026 (2026-12-21T15:59:00Z)
+
+### Location
+- **Use My Location** button — uses `navigator.geolocation.getCurrentPosition` to center the map on the viewer's location and display their local sunrise/sunset in the browser's timezone. Handles permission-denied / unavailable / timeout with inline button feedback.
+
+### Permalink state
+Share exact views with `?time=&lat=&lon=&zoom=`. See [Permalink Format](#permalink-format) below.
 
 ## Tech Stack
 
 | Layer | Tool |
 |-------|------|
 | Mapping | [Leaflet](https://leafletjs.com/) 1.9.4 |
-| Solar calculations | [SunCalc](https://github.com/mourner/suncalc) 1.9.0 |
+| Solar position (subsolar + twilight) | Self-contained first-principles algorithm (low-precision solar position + GMST + geodesic spherical caps) |
+| Auxiliary solar/lunar data | [SunCalc](https://github.com/mourner/suncalc) 1.9.0 — used only for Greenwich solar noon, moon phase, and hover sunrise/sunset/day-length |
 | Base map | Esri World Dark Gray Base + Boundaries & Places |
 | Hosting | Static nginx container behind Nginx Proxy Manager |
 | Deployment | Docker Compose on a VPS |
 
+> **Note on time display:** Times are shown in UTC by default for arbitrary map hovers (timezone-independent and unambiguous). Clicking a major city marker or using "Use My Location" displays times in that location's own timezone — IANA timezones are hardcoded per city in `app.js`, and the browser's local timezone is used for "Use My Location". Day length is timezone-independent and always correct.
+
 ## Astronomy
 
-The subsolar point and twilight boundaries are computed from first principles using:
+The subsolar point and twilight boundaries are computed from first principles — **not** from SunCalc — using:
 
-- Low-precision solar position algorithm
+- Low-precision solar position algorithm (mean longitude, mean anomaly, ecliptic longitude, obliquity)
 - Greenwich Mean Sidereal Time (GMST)
-- Geodesic spherical caps centered on the antisolar point
+- Equatorial → subsolar transform: `latitude = declination`, `longitude = RA − GMST` (east-positive)
+- Geodesic spherical caps centered on the **antisolar point** (the antipode of the subsolar point), with angular radius `90° + solar_altitude`
 
 The math is verified against standard solstice/equinox values:
 
-| Event | Subsolar Latitude |
-|-------|-------------------|
-| March equinox | ~0° |
-| June solstice | ~+23.44° |
-| September equinox | ~0° |
-| December solstice | ~−23.44° |
+| Event | Subsolar Latitude | Verified |
+|-------|-------------------|----------|
+| March equinox 2026 | 0.00° | ✓ |
+| June solstice 2026 | +23.44° | ✓ |
+| September equinox 2026 | −0.03° | ✓ |
+| December solstice 2026 | −23.44° | ✓ |
+
+### Longitude convention
+
+Longitudes are **east-positive** throughout, matching both Leaflet and SunCalc:
+- Seattle is `lng: -122.3`
+- Tokyo is `lng: 139.65`
+- Subsolar longitude is computed as `RA − GMST` and wrapped to `[−180, 180)` via a sign-safe modulo (`((x + 540) % 360) − 180`) so values near the antimeridian never come out as e.g. `−186°` instead of `+174°`.
+- Hover longitude is wrapped via the fully sign-safe `(((x + 180) % 360 + 360) % 360) − 180` because Leaflet's `latlng.lng` can be unbounded when `worldCopyJump: true`.
 
 ## Project Structure
 
@@ -51,7 +91,7 @@ The math is verified against standard solstice/equinox values:
 .
 ├── html/
 │   ├── index.html          # Main page
-│   ├── app.js              # Map, astronomy, UI logic
+│   ├── app.js              # Map, astronomy, UI logic (self-contained, no build step)
 │   ├── style.css           # Styling
 │   └── favicon.svg         # Site icon
 ├── docker-compose.yml      # nginx static container
@@ -85,7 +125,7 @@ To deploy from this repo:
 ```
 
 The script:
-1. Syncs files to `/home/michael/docker-configs/daylight/` on the VPS
+1. Syncs `docker-compose.yml` and `html/` to `/home/michael/docker-configs/daylight/` on the VPS
 2. Pulls the latest `nginx:alpine` image
 3. Recreates/starts the `daylight-static` container
 
@@ -97,10 +137,18 @@ https://daylight.forkstech.com/?time=2026-06-21T10:50:00.000Z&lat=47.6000&lon=-1
 
 | Param | Description |
 |-------|-------------|
-| `time` | ISO 8601 UTC timestamp |
-| `lat` | Map center latitude |
-| `lon` | Map center longitude |
-| `zoom` | Zoom level |
+| `time` | ISO 8601 UTC timestamp. Omit for live mode. |
+| `lat`  | Map center latitude. `0` is honored (not treated as missing). |
+| `lon`  | Map center longitude (east-positive). `0` is honored (not treated as missing). |
+| `zoom` | Leaflet zoom level (2–12). |
+
+When `lat`/`lon` are present, the **Follow subsolar point** control starts *off* so the shared view is preserved instead of being immediately panned away to the subsolar point.
+
+## Known Limitations
+
+- **Hover sunrise/sunset for arbitrary points are shown in UTC**, not in the hovered location's local civil time. True civil-time display for arbitrary lat/lng (not just known cities) would require a timezone lookup library (e.g. `tz-lookup`), which is not yet bundled. Click a major city or use "Use My Location" for local-time display.
+- **Subsolar point marker** is placed at the exact computed longitude; with `worldCopyJump: true` it may occasionally appear at the antimeridian edge during wrapping. The displayed coordinate is always in `[−180, 180]`.
+- **Geolocation requires HTTPS and user permission.** On `http://` (e.g. local dev without TLS) or if the user denies the prompt, the button reports the error inline.
 
 ## License
 
