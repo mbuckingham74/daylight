@@ -147,7 +147,10 @@
 
   // Build twilight band polygon(s). Bands are geodesic rings/caps centered on
   // the antisolar point. Angular radius from antipode = 90° + altitude.
-  // Returns an array of rings suitable for L.polygon multipolygon rendering.
+  // Returns an array of rings, each a closed polygon suitable for L.polygon.
+  // Key: outer and inner circles are split at the antimeridian SEPARATELY,
+  // then paired by side so each segment is a proper annular section, not
+  // just an arc that would fill incorrectly.
   function computeTwilightBand(date, rOuter, rInner, isCap) {
     const subsolar = getSubsolarPoint(date);
     const antipodeLat = -subsolar.lat;
@@ -155,20 +158,34 @@
     const poleLat = subsolar.lat > 0 ? -90 : 90;
 
     const outer = geodesicCircle(antipodeLat, antipodeLng, rOuter, 180);
+    const outerSegs = splitAtAntimeridian(outer);
 
     if (isCap) {
-      // Night core: outer circle + pole point to close the cap
-      const fullRing = outer.concat([[poleLat, antipodeLng]]);
-      return splitAtAntimeridian(fullRing);
+      // Night core: each outer segment + pole = a wedge of the cap
+      return outerSegs.map(seg => {
+        const last = seg[seg.length - 1];
+        return seg.concat([[poleLat, last[1]]]);
+      });
     }
 
     const inner = geodesicCircle(antipodeLat, antipodeLng, rInner, 180);
-    // Ring: outer circle → pole → inner circle (reversed) → pole
-    const fullRing = outer
-      .concat([[poleLat, antipodeLng]])
-      .concat(inner.slice().reverse())
-      .concat([[poleLat, antipodeLng]]);
-    return splitAtAntimeridian(fullRing);
+    const innerSegs = splitAtAntimeridian(inner);
+
+    // Pair outer and inner segments by index. Concentric circles cross the
+    // antimeridian at the same longitudes, so segment counts match.
+    const numSegs = Math.max(outerSegs.length, innerSegs.length);
+    const rings = [];
+    for (let i = 0; i < numSegs; i++) {
+      const os = outerSegs[i % outerSegs.length];
+      const is = innerSegs[i % innerSegs.length];
+      // Annular section: outer arc → pole → inner arc (reversed) → pole
+      const ring = os
+        .concat([[poleLat, os[os.length - 1][1]]])
+        .concat(is.slice().reverse())
+        .concat([[poleLat, is[0][1]]]);
+      rings.push(ring);
+    }
+    return rings;
   }
 
   // Twilight band layers (from lightest to darkest). Angular radii are measured
@@ -197,7 +214,9 @@
   function updateTwilight(date) {
     twilightDefs.forEach((def, i) => {
       const rings = computeTwilightBand(date, def.rOuter, def.rInner, def.isCap);
-      // setLatLngs with multipolygon format: [[ring1], [ring2], ...]
+      // Each ring is a standalone polygon (annular section or cap wedge).
+      // Use multipolygon format: [polygon1_rings, polygon2_rings, ...]
+      // where each polygon's rings = [outer_ring] (no holes).
       twilightLayers[i].setLatLngs(rings.map(r => [r]));
     });
   }
