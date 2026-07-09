@@ -75,14 +75,12 @@
   // Subsolar point: latitude = declination, longitude where hour angle = 0
   function getSubsolarPoint(date) {
     const sun = getSunEquatorial(date);
-    let lng = sun.alpha - sun.gmstDeg;
-    lng = ((lng + 540) % 360) - 180;
-    return { lat: sun.delta, lng };
+    return { lat: sun.delta, lng: wrapLng(sun.alpha - sun.gmstDeg) };
   }
 
   // Wrap longitude to [-180, 180)
   function wrapLng(lng) {
-    return ((lng + 540) % 360) - 180;
+    return ((lng + 180) % 360 + 360) % 360 - 180;
   }
 
   // The daylight/twilight layer is rendered as canvas map tiles instead of
@@ -622,9 +620,9 @@
 
   const presets = {
     'mar-equinox': new Date('2026-03-20T14:46:00Z'),
-    'jun-solstice': new Date('2026-06-21T10:50:00Z'),
-    'sep-equinox': new Date('2026-09-23T02:19:00Z'),
-    'dec-solstice': new Date('2026-12-21T15:59:00Z')
+    'jun-solstice': new Date('2026-06-21T08:24:00Z'),
+    'sep-equinox': new Date('2026-09-23T00:05:00Z'),
+    'dec-solstice': new Date('2026-12-21T20:50:00Z')
   };
 
   presetBtns.forEach(btn => {

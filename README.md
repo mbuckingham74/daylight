@@ -36,9 +36,9 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 - **±12-hour slider** — scrubs ±12 hours around the current time-travel anchor (which is either "now" in live mode, or the selected preset). The slider and presets compose: clicking a preset sets the anchor, then dragging the slider scrubs around that anchor without jumping back to "now".
 - **Solstice / equinox presets** — jump to:
   - March equinox 2026 (2026-03-20T14:46:00Z)
-  - June solstice 2026 (2026-06-21T10:50:00Z)
-  - September equinox 2026 (2026-09-23T02:19:00Z)
-  - December solstice 2026 (2026-12-21T15:59:00Z)
+  - June solstice 2026 (2026-06-21T08:24:00Z)
+  - September equinox 2026 (2026-09-23T00:05:00Z)
+  - December solstice 2026 (2026-12-21T20:50:00Z)
 
 ### Location
 - **Use My Location** button — uses `navigator.geolocation.getCurrentPosition` to center the map on the viewer's location and display their local sunrise/sunset in the browser's timezone. Handles permission-denied / unavailable / timeout with inline button feedback.
@@ -132,7 +132,7 @@ The script:
 ## Permalink Format
 
 ```
-https://daylight.forkstech.com/?time=2026-06-21T10:50:00.000Z&lat=47.6000&lon=-122.3000&zoom=4
+https://daylight.forkstech.com/?time=2026-06-21T08:24:00.000Z&lat=47.6000&lon=-122.3000&zoom=4
 ```
 
 | Param | Description |
