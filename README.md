@@ -25,6 +25,7 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
   - **Hover any point** on the map → times in UTC (timezone-independent, always correct)
   - **Click a major city marker** → times in that city's IANA timezone (e.g. `05:21 PDT` for Seattle, `04:54 BST` for London)
   - **Use My Location** button → times in the browser's local timezone (correct because the user is physically there)
+- **Browser location context** — displays the browser's IANA timezone immediately, and fills the nearest major city when geolocation is already granted or when the viewer clicks **Use My Location**.
 
 ### Controls
 - **Follow Sun** — auto-pans the map to keep the Sun marker centered. Auto-disables on manual pan/zoom, on city click, and on "Use My Location". Defaults *off* so the first view stays a stable world map.
@@ -34,6 +35,7 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 ### Time travel
 - **Live button** — return to real-time tracking
 - **±12-hour slider** — scrubs ±12 hours around the current time-travel anchor (which is either "now" in live mode, or the selected preset). The slider and presets compose: clicking a preset sets the anchor, then dragging the slider scrubs around that anchor without jumping back to "now".
+- **Preset selection state** — the active solstice/equinox preset is highlighted while that exact preset time is shown.
 - **Solstice / equinox presets** — jump to:
   - March equinox 2026 (2026-03-20T14:46:00Z)
   - June solstice 2026 (2026-06-21T08:24:00Z)
@@ -42,6 +44,7 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 
 ### Location
 - **Use My Location** button — uses `navigator.geolocation.getCurrentPosition` to center the map on the viewer's location and display their local sunrise/sunset in the browser's timezone. Handles permission-denied / unavailable / timeout with inline button feedback.
+- **Nearest city** — computed client-side from geolocation against a bundled list of major cities, so no external geocoding service is required.
 
 ### Permalink state
 Open the title to return to the clean root URL. Exact views can still be opened with `?time=&lat=&lon=&zoom=`. See [Permalink Format](#permalink-format) below.

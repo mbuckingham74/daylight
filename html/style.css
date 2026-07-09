@@ -130,6 +130,26 @@ html, body {
   flex-shrink: 0;
 }
 
+.browser-location {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.browser-location .stat {
+  align-items: flex-start;
+}
+
+.browser-location .stat-value {
+  max-width: 155px;
+  text-align: right;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+
 #my-location-btn:hover:not(:disabled) {
   background: rgba(91, 140, 255, 0.28);
 }
@@ -240,6 +260,18 @@ html, body {
 .presets button:hover {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.2);
+}
+
+.presets button.active {
+  background: rgba(255, 203, 68, 0.22);
+  border-color: rgba(255, 203, 68, 0.72);
+  color: #ffe08a;
+  box-shadow: 0 0 0 1px rgba(255, 203, 68, 0.18);
+}
+
+.presets button.active:hover {
+  background: rgba(255, 203, 68, 0.3);
+  border-color: rgba(255, 203, 68, 0.9);
 }
 
 /* Leaflet customizations */
