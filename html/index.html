@@ -6,7 +6,7 @@
   <title>Daylight Map - Live Day/Night Tracker</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <link rel="stylesheet" href="style.css?v=20260709a" />
+  <link rel="stylesheet" href="style.css?v=20260710a" />
 </head>
 <body>
   <div id="map"></div>
@@ -15,114 +15,296 @@
     <h1><a href="/" id="home-link" aria-label="Open Daylight Map home">Daylight Map</a></h1>
     <p class="subtitle">Live day and night regions across the planet.</p>
 
-    <div class="stats">
-      <div class="stat">
-        <span class="stat-label">UTC Time</span>
-        <span class="stat-value" id="utc-time">--:--:--</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Sun Overhead</span>
-        <span class="stat-value" id="sun-position">--</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Solar Noon at Prime Meridian</span>
-        <span class="stat-value" id="solar-noon">--:--</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Moon Phase</span>
-        <span class="stat-value" id="moon-phase">--</span>
-      </div>
+    <div class="panel-tabs" role="tablist" aria-label="Daylight views">
+      <button class="panel-tab active" id="map-tab" type="button" role="tab" aria-selected="true" aria-controls="map-page" data-panel-page="map-page">Map</button>
+      <button class="panel-tab" id="solar-tab" type="button" role="tab" aria-selected="false" aria-controls="solar-page" data-panel-page="solar-page">Solar Details</button>
     </div>
 
-    <div class="location browser-location-card" id="browser-location-info">
-      <div class="location-header">
-        <h2>Browser Location</h2>
-        <button id="my-location-btn" type="button" title="Center the map on your current location">Use My Location</button>
+    <div class="panel-page active" id="map-page" role="tabpanel" aria-labelledby="map-tab">
+      <div class="stats">
+        <div class="stat">
+          <span class="stat-label">UTC Time</span>
+          <span class="stat-value" id="utc-time">--:--:--</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Sun Overhead</span>
+          <span class="stat-value" id="sun-position">--</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Solar Noon at Prime Meridian</span>
+          <span class="stat-value" id="solar-noon">--:--</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Moon Phase</span>
+          <span class="stat-value" id="moon-phase">--</span>
+        </div>
       </div>
-      <div class="browser-location" aria-live="polite">
-        <div class="stat">
-          <span class="stat-label">Timezone</span>
-          <span class="stat-value" id="browser-timezone">--</span>
+
+      <div class="location browser-location-card" id="browser-location-info">
+        <div class="location-header">
+          <h2>Browser Location</h2>
+          <button id="my-location-btn" type="button" title="Center the map on your current location">Use My Location</button>
+        </div>
+        <div class="browser-location" aria-live="polite">
+          <div class="stat">
+            <span class="stat-label">Timezone</span>
+            <span class="stat-value" id="browser-timezone">--</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Nearest City</span>
+            <span class="stat-value" id="browser-nearest-city">--</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Local Sunrise</span>
+            <span class="stat-value" id="browser-sunrise">--</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Local Sunset</span>
+            <span class="stat-value" id="browser-sunset">--</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Day Length</span>
+            <span class="stat-value" id="browser-daylength">--</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="location" id="location-info">
+        <div class="location-header">
+          <h2>Map Point</h2>
         </div>
         <div class="stat">
-          <span class="stat-label">Nearest City</span>
-          <span class="stat-value" id="browser-nearest-city">--</span>
+          <span class="stat-label">Coordinates</span>
+          <span class="stat-value" id="hover-coords">--</span>
         </div>
         <div class="stat">
-          <span class="stat-label">Local Sunrise</span>
-          <span class="stat-value" id="browser-sunrise">--</span>
+          <span class="stat-label">Local Time</span>
+          <span class="stat-value" id="hover-local-time">--</span>
         </div>
         <div class="stat">
-          <span class="stat-label">Local Sunset</span>
-          <span class="stat-value" id="browser-sunset">--</span>
+          <span class="stat-label">Sunrise</span>
+          <span class="stat-value" id="hover-sunrise">--</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Sunset</span>
+          <span class="stat-value" id="hover-sunset">--</span>
         </div>
         <div class="stat">
           <span class="stat-label">Day Length</span>
-          <span class="stat-value" id="browser-daylength">--</span>
+          <span class="stat-value" id="hover-daylength">--</span>
+        </div>
+      </div>
+
+      <div class="controls">
+        <label>
+          <input type="checkbox" id="follow-sun" />
+          Follow Sun
+        </label>
+        <label>
+          <input type="checkbox" id="show-terminator" checked />
+          Show twilight
+        </label>
+        <label>
+          <input type="checkbox" id="show-cities" checked />
+          Major cities
+        </label>
+      </div>
+
+      <div class="time-controls">
+        <div class="time-header">
+          <h2>Time Travel</h2>
+          <button id="live-btn" class="active">Live</button>
+        </div>
+        <input type="range" id="time-slider" min="-12" max="12" step="0.1" value="0" />
+        <div class="time-value" id="time-slider-value">Live</div>
+        <div class="presets">
+          <button data-preset="mar-equinox">Mar Eq</button>
+          <button data-preset="jun-solstice">Jun Sol</button>
+          <button data-preset="sep-equinox">Sep Eq</button>
+          <button data-preset="dec-solstice">Dec Sol</button>
         </div>
       </div>
     </div>
 
-    <div class="location" id="location-info">
-      <div class="location-header">
-        <h2>Map Point</h2>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Coordinates</span>
-        <span class="stat-value" id="hover-coords">--</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Local Time</span>
-        <span class="stat-value" id="hover-local-time">--</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Sunrise</span>
-        <span class="stat-value" id="hover-sunrise">--</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Sunset</span>
-        <span class="stat-value" id="hover-sunset">--</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Day Length</span>
-        <span class="stat-value" id="hover-daylength">--</span>
-      </div>
-    </div>
+    <div class="panel-page solar-page" id="solar-page" role="tabpanel" aria-labelledby="solar-tab" hidden>
+      <section class="detail-section">
+        <div class="detail-section-header">
+          <h2>Sun & Earth</h2>
+          <span class="section-meta" id="solar-distance-trend">--</span>
+        </div>
+        <div class="detail-grid">
+          <div class="detail-stat">
+            <span class="stat-label">Distance</span>
+            <span class="stat-value" id="solar-distance-au">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Kilometers</span>
+            <span class="stat-value" id="solar-distance-km">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Light Time</span>
+            <span class="stat-value" id="solar-light-time">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Orbital Speed</span>
+            <span class="stat-value" id="solar-orbital-speed">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Apparent Diameter</span>
+            <span class="stat-value" id="solar-apparent-size">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Solar Energy</span>
+            <span class="stat-value" id="solar-energy">--</span>
+          </div>
+        </div>
+      </section>
 
-    <div class="controls">
-      <label>
-        <input type="checkbox" id="follow-sun" />
-        Follow Sun
-      </label>
-      <label>
-        <input type="checkbox" id="show-terminator" checked />
-        Show twilight
-      </label>
-      <label>
-        <input type="checkbox" id="show-cities" checked />
-        Major cities
-      </label>
-    </div>
+      <section class="detail-section">
+        <div class="detail-section-header">
+          <h2>Orientation</h2>
+          <span class="section-meta" id="next-season-event">--</span>
+        </div>
+        <div class="detail-grid">
+          <div class="detail-stat">
+            <span class="stat-label">Axial Tilt</span>
+            <span class="stat-value" id="earth-axial-tilt">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Solar Declination</span>
+            <span class="stat-value" id="solar-declination">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Right Ascension</span>
+            <span class="stat-value" id="solar-right-ascension">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">GMST</span>
+            <span class="stat-value" id="solar-gmst">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Equation of Time</span>
+            <span class="stat-value" id="equation-of-time">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Antisolar Point</span>
+            <span class="stat-value" id="antisolar-point">--</span>
+          </div>
+        </div>
+      </section>
 
-    <div class="time-controls">
-      <div class="time-header">
-        <h2>Time Travel</h2>
-        <button id="live-btn" class="active">Live</button>
-      </div>
-      <input type="range" id="time-slider" min="-12" max="12" step="0.1" value="0" />
-      <div class="time-value" id="time-slider-value">Live</div>
-      <div class="presets">
-        <button data-preset="mar-equinox">Mar Eq</button>
-        <button data-preset="jun-solstice">Jun Sol</button>
-        <button data-preset="sep-equinox">Sep Eq</button>
-        <button data-preset="dec-solstice">Dec Sol</button>
-      </div>
+      <section class="detail-section">
+        <div class="detail-section-header">
+          <h2>Selected Point</h2>
+          <span class="section-meta" id="detail-target-label">--</span>
+        </div>
+        <div class="detail-grid">
+          <div class="detail-stat detail-stat-wide">
+            <span class="stat-label">Coordinates</span>
+            <span class="stat-value" id="detail-target-coords">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Sun Altitude</span>
+            <span class="stat-value" id="local-sun-altitude">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Azimuth</span>
+            <span class="stat-value" id="local-sun-azimuth">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Zenith Angle</span>
+            <span class="stat-value" id="local-sun-zenith">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Shadow Length</span>
+            <span class="stat-value" id="local-shadow-length">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Solar Noon Alt.</span>
+            <span class="stat-value" id="local-noon-altitude">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Day Length</span>
+            <span class="stat-value" id="local-detail-daylength">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Change / Day</span>
+            <span class="stat-value" id="local-daylength-change">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Civil Twilight</span>
+            <span class="stat-value" id="local-civil-twilight">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Nautical + Astro</span>
+            <span class="stat-value" id="local-deep-twilight">--</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="detail-section">
+        <div class="detail-section-header">
+          <h2>Global Light</h2>
+          <span class="section-meta" id="global-lit-summary">--</span>
+        </div>
+        <div class="light-breakdown">
+          <div class="light-row">
+            <span>Daylight</span>
+            <div class="light-bar"><span id="global-daylight-bar"></span></div>
+            <strong id="global-daylight">--</strong>
+          </div>
+          <div class="light-row">
+            <span>Civil</span>
+            <div class="light-bar"><span id="global-civil-bar"></span></div>
+            <strong id="global-civil">--</strong>
+          </div>
+          <div class="light-row">
+            <span>Nautical</span>
+            <div class="light-bar"><span id="global-nautical-bar"></span></div>
+            <strong id="global-nautical">--</strong>
+          </div>
+          <div class="light-row">
+            <span>Astro</span>
+            <div class="light-bar"><span id="global-astro-bar"></span></div>
+            <strong id="global-astro">--</strong>
+          </div>
+          <div class="light-row">
+            <span>Night</span>
+            <div class="light-bar"><span id="global-night-bar"></span></div>
+            <strong id="global-night">--</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="detail-section chart-section">
+        <div class="detail-section-header">
+          <h2>Year Curves</h2>
+          <span class="section-meta">Declination + distance</span>
+        </div>
+        <canvas class="solar-chart" id="solar-year-chart" width="640" height="220"></canvas>
+      </section>
+
+      <section class="detail-section chart-section">
+        <div class="detail-section-header">
+          <h2>Analemma</h2>
+          <span class="section-meta" id="analemma-clock-label">--</span>
+        </div>
+        <canvas class="solar-chart" id="analemma-chart" width="640" height="260"></canvas>
+      </section>
+
+      <section class="detail-section chart-section">
+        <div class="detail-section-header">
+          <h2>Day Length Curve</h2>
+          <span class="section-meta" id="daylength-chart-label">--</span>
+        </div>
+        <canvas class="solar-chart" id="daylength-chart" width="640" height="220"></canvas>
+      </section>
     </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tz-lookup@6.1.25/tz.js"></script>
-  <script src="app.js?v=20260709o"></script>
+  <script src="app.js?v=20260710a"></script>
 </body>
 </html>

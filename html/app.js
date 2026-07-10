@@ -3,6 +3,15 @@
 
   const D2R = Math.PI / 180;
   const R2D = 180 / Math.PI;
+  const AU_KM = 149597870.7;
+  const KM_TO_MILES = 0.621371;
+  const LIGHT_SECONDS_PER_AU = 499.004783836;
+  const SOLAR_CONSTANT = 1361;
+  const SOLAR_ANGULAR_DIAMETER_AT_1_AU = 0.533128;
+  const EARTH_ORBIT_ECCENTRICITY = 0.0167086;
+  const SUN_GRAVITATIONAL_PARAMETER = 132712440018;
+  const MS_PER_DAY = 86400000;
+  const seasonEventCache = {};
 
   // Parse permalink params on load
   const urlParams = new URLSearchParams(window.location.search);
@@ -52,20 +61,22 @@
     noWrap: false
   }).addTo(map);
 
+  function normalizeDegrees(deg) {
+    return ((deg % 360) + 360) % 360;
+  }
+
   // Compute the Sun's equatorial coordinates (right ascension, declination) and GMST
   function getSunEquatorial(date) {
     const julian = date.getTime() / 86400000.0 + 2440587.5;
     const d = julian - 2451545.0;
 
-    const gmst = (18.697374558 + 24.06570982441908 * d) % 24;
+    const gmst = ((18.697374558 + 24.06570982441908 * d) % 24 + 24) % 24;
     const gmstDeg = gmst * 15;
 
-    let L = 280.460 + 0.9856474 * d;
-    L %= 360;
-    let g = 357.528 + 0.9856003 * d;
-    g %= 360;
+    const L = normalizeDegrees(280.460 + 0.9856474 * d);
+    const g = normalizeDegrees(357.528 + 0.9856003 * d);
 
-    const lambda = L + 1.915 * Math.sin(g * D2R) + 0.02 * Math.sin(2 * g * D2R);
+    const lambda = normalizeDegrees(L + 1.915 * Math.sin(g * D2R) + 0.02 * Math.sin(2 * g * D2R));
 
     const T = d / 36525;
     const epsilon = 23.43929111 - T * (46.836769 / 3600
@@ -74,13 +85,22 @@
           - T * (0.576e-6 / 3600
             - T * 4.34e-8 / 3600))));
 
-    let alpha = Math.atan(Math.cos(epsilon * D2R) * Math.tan(lambda * D2R)) * R2D;
-    const delta = Math.asin(Math.sin(epsilon * D2R) * Math.sin(lambda * D2R)) * R2D;
-    const lQuadrant = Math.floor(lambda / 90) * 90;
-    const raQuadrant = Math.floor(alpha / 90) * 90;
-    alpha = alpha + (lQuadrant - raQuadrant);
+    const lambdaR = lambda * D2R;
+    const epsilonR = epsilon * D2R;
+    const alpha = normalizeDegrees(Math.atan2(Math.cos(epsilonR) * Math.sin(lambdaR), Math.cos(lambdaR)) * R2D);
+    const delta = Math.asin(Math.sin(epsilonR) * Math.sin(lambdaR)) * R2D;
 
-    return { alpha, delta, gmstDeg };
+    return {
+      alpha,
+      delta,
+      gmstDeg,
+      julian,
+      daysSinceJ2000: d,
+      meanLongitude: L,
+      meanAnomaly: g,
+      eclipticLongitude: lambda,
+      obliquity: epsilon
+    };
   }
 
   // Subsolar point: latitude = declination, longitude where hour angle = 0
@@ -234,6 +254,217 @@
     const latR = lat * D2R;
     const hourAngle = wrapLng(lng - sun.lng) * D2R;
     return Math.sin(latR) * sun.sinDec + Math.cos(latR) * sun.cosDec * Math.cos(hourAngle);
+  }
+
+  function getEarthSunDistanceAu(date) {
+    const sun = getSunEquatorial(date);
+    const anomaly = sun.meanAnomaly * D2R;
+    return 1.00014 - 0.01671 * Math.cos(anomaly) - 0.00014 * Math.cos(2 * anomaly);
+  }
+
+  function getSolarOrbitStats(date) {
+    const distanceAu = getEarthSunDistanceAu(date);
+    const distanceKm = distanceAu * AU_KM;
+    const dailyChangeKm = (getEarthSunDistanceAu(new Date(date.getTime() + MS_PER_DAY))
+      - getEarthSunDistanceAu(new Date(date.getTime() - MS_PER_DAY))) * AU_KM / 2;
+    const orbitalSpeed = Math.sqrt(SUN_GRAVITATIONAL_PARAMETER * (2 / distanceKm - 1 / AU_KM));
+    const energyRatio = 1 / (distanceAu * distanceAu);
+    const trend = Math.abs(dailyChangeKm) < 250
+      ? 'Near orbital turn'
+      : dailyChangeKm < 0
+        ? 'Closing toward perihelion'
+        : 'Receding toward aphelion';
+
+    return {
+      distanceAu,
+      distanceKm,
+      distanceMiles: distanceKm * KM_TO_MILES,
+      lightSeconds: distanceAu * LIGHT_SECONDS_PER_AU,
+      orbitalSpeed,
+      energyRatio,
+      solarConstant: SOLAR_CONSTANT * energyRatio,
+      apparentDiameterDeg: SOLAR_ANGULAR_DIAMETER_AT_1_AU / distanceAu,
+      dailyChangeKm,
+      trend
+    };
+  }
+
+  function getEquationOfTimeMinutes(date) {
+    const sun = getSunEquatorial(date);
+    const T = sun.daysSinceJ2000 / 36525;
+    const eccentricity = EARTH_ORBIT_ECCENTRICITY - T * (0.000042037 + 0.0000001267 * T);
+    const meanLongitude = sun.meanLongitude * D2R;
+    const meanAnomaly = sun.meanAnomaly * D2R;
+    const obliquity = sun.obliquity * D2R;
+    const y = Math.tan(obliquity / 2) ** 2;
+    const eot = y * Math.sin(2 * meanLongitude)
+      - 2 * eccentricity * Math.sin(meanAnomaly)
+      + 4 * eccentricity * y * Math.sin(meanAnomaly) * Math.cos(2 * meanLongitude)
+      - 0.5 * y * y * Math.sin(4 * meanLongitude)
+      - 1.25 * eccentricity * eccentricity * Math.sin(2 * meanAnomaly);
+    return eot * R2D * 4;
+  }
+
+  function getSolarPosition(date, lat, lng) {
+    const sun = getSunEquatorial(date);
+    const subsolarLng = wrapLng(sun.alpha - sun.gmstDeg);
+    const latR = lat * D2R;
+    const declination = sun.delta * D2R;
+    const hourAngle = wrapLng(lng - subsolarLng) * D2R;
+    const sinAltitude = Math.sin(latR) * Math.sin(declination)
+      + Math.cos(latR) * Math.cos(declination) * Math.cos(hourAngle);
+    const altitude = Math.asin(clamp(sinAltitude, -1, 1)) * R2D;
+    const azimuth = normalizeDegrees(Math.atan2(
+      Math.sin(hourAngle),
+      Math.cos(hourAngle) * Math.sin(latR) - Math.tan(declination) * Math.cos(latR)
+    ) * R2D + 180);
+
+    return {
+      altitude,
+      azimuth,
+      zenith: 90 - altitude,
+      hourAngle: hourAngle * R2D
+    };
+  }
+
+  function getGlobalLightFractions() {
+    const fractionAbove = altitudeDeg => (1 - Math.sin(altitudeDeg * D2R)) / 2;
+    const daylight = fractionAbove(-REFRACTION);
+    const civilAndAbove = fractionAbove(-6);
+    const nauticalAndAbove = fractionAbove(-12);
+    const astroAndAbove = fractionAbove(-18);
+
+    return {
+      daylight,
+      civil: civilAndAbove - daylight,
+      nautical: nauticalAndAbove - civilAndAbove,
+      astronomical: astroAndAbove - nauticalAndAbove,
+      night: 1 - astroAndAbove
+    };
+  }
+
+  function getSeasonEvents(year) {
+    if (seasonEventCache[year]) return seasonEventCache[year];
+
+    const events = [
+      {
+        name: 'March equinox',
+        date: refineDeclinationRoot(Date.UTC(year, 2, 18), Date.UTC(year, 2, 22))
+      },
+      {
+        name: 'June solstice',
+        date: refineDeclinationExtremum(Date.UTC(year, 5, 18), Date.UTC(year, 5, 23), true)
+      },
+      {
+        name: 'September equinox',
+        date: refineDeclinationRoot(Date.UTC(year, 8, 20), Date.UTC(year, 8, 25))
+      },
+      {
+        name: 'December solstice',
+        date: refineDeclinationExtremum(Date.UTC(year, 11, 18), Date.UTC(year, 11, 23), false)
+      }
+    ];
+
+    seasonEventCache[year] = events;
+    return events;
+  }
+
+  function refineDeclinationRoot(startMs, endMs) {
+    let low = startMs;
+    let high = endMs;
+    let lowValue = getSunEquatorial(new Date(low)).delta;
+    const highValue = getSunEquatorial(new Date(high)).delta;
+
+    if (lowValue === 0) return new Date(low);
+    if (highValue === 0) return new Date(high);
+    if (Math.sign(lowValue) === Math.sign(highValue)) return new Date((low + high) / 2);
+
+    for (let i = 0; i < 48; i++) {
+      const mid = (low + high) / 2;
+      const midValue = getSunEquatorial(new Date(mid)).delta;
+      if (Math.sign(lowValue) === Math.sign(midValue)) {
+        low = mid;
+        lowValue = midValue;
+      } else {
+        high = mid;
+      }
+    }
+
+    return new Date((low + high) / 2);
+  }
+
+  function refineDeclinationExtremum(startMs, endMs, findMaximum) {
+    let low = startMs;
+    let high = endMs;
+
+    for (let i = 0; i < 50; i++) {
+      const m1 = low + (high - low) / 3;
+      const m2 = high - (high - low) / 3;
+      const d1 = getSunEquatorial(new Date(m1)).delta;
+      const d2 = getSunEquatorial(new Date(m2)).delta;
+      if (findMaximum ? d1 < d2 : d1 > d2) {
+        low = m1;
+      } else {
+        high = m2;
+      }
+    }
+
+    return new Date((low + high) / 2);
+  }
+
+  function getNextSeasonEvent(date) {
+    const year = date.getUTCFullYear();
+    const events = [];
+    for (let y = year - 1; y <= year + 2; y++) {
+      events.push(...getSeasonEvents(y));
+    }
+
+    return events
+      .filter(event => event.date > date)
+      .sort((a, b) => a.date - b.date)[0] || null;
+  }
+
+  function getDayLengthSeconds(date, lat, lng) {
+    const times = SunCalc.getTimes(date, lat, lng);
+    if (isValidDate(times.sunrise) && isValidDate(times.sunset) && times.sunset > times.sunrise) {
+      return (times.sunset - times.sunrise) / 1000;
+    }
+
+    const noon = isValidDate(times.solarNoon) ? times.solarNoon : date;
+    return getSolarPosition(noon, lat, lng).altitude >= -REFRACTION ? 86400 : 0;
+  }
+
+  function getTwilightDurations(date, lat, lng) {
+    const times = SunCalc.getTimes(date, lat, lng);
+    const diffSeconds = (later, earlier) => {
+      if (!isValidDate(later) || !isValidDate(earlier) || later <= earlier) return 0;
+      return (later - earlier) / 1000;
+    };
+    const civil = diffSeconds(times.sunrise, times.dawn) + diffSeconds(times.dusk, times.sunset);
+    const nautical = diffSeconds(times.dawn, times.nauticalDawn) + diffSeconds(times.nauticalDusk, times.dusk);
+    const astronomical = diffSeconds(times.nauticalDawn, times.nightEnd) + diffSeconds(times.night, times.nauticalDusk);
+
+    return {
+      civil,
+      nautical,
+      astronomical,
+      hasTransitions: civil + nautical + astronomical > 0
+    };
+  }
+
+  function getSolarDetailsTarget() {
+    if (activeMapPoint) return activeMapPoint;
+    if (browserLocation) return browserLocation;
+
+    const center = map.getCenter();
+    const lat = clamp(center.lat, -85, 85);
+    const lng = wrapLng(center.lng);
+    return {
+      lat,
+      lng,
+      label: 'Map center',
+      timeZone: lookupTimeZone(lat, lng)
+    };
   }
 
   const TwilightGridLayer = L.GridLayer.extend({
@@ -564,6 +795,82 @@
     return `${h}h ${m}m`;
   }
 
+  function formatCompactDuration(seconds) {
+    if (!isFinite(seconds) || seconds < 0) return '--';
+    const rounded = Math.round(seconds);
+    const h = Math.floor(rounded / 3600);
+    const m = Math.floor((rounded % 3600) / 60);
+    const s = rounded % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  }
+
+  function formatSignedDuration(seconds) {
+    if (!isFinite(seconds)) return '--';
+    const sign = seconds > 0 ? '+' : seconds < 0 ? '-' : '';
+    return sign + formatCompactDuration(Math.abs(seconds));
+  }
+
+  function formatDegrees(value, decimals = 2) {
+    if (!isFinite(value)) return '--';
+    return `${value.toFixed(decimals)}°`;
+  }
+
+  function getCompassDirection(degrees) {
+    if (!isFinite(degrees)) return '';
+    const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    return directions[Math.round(normalizeDegrees(degrees) / 45) % directions.length];
+  }
+
+  function formatSignedDegrees(value, decimals = 2) {
+    if (!isFinite(value)) return '--';
+    const sign = value > 0 ? '+' : value < 0 ? '-' : '';
+    return `${sign}${Math.abs(value).toFixed(decimals)}°`;
+  }
+
+  function formatRightAscension(degrees) {
+    if (!isFinite(degrees)) return '--';
+    const totalMinutes = Math.round(normalizeDegrees(degrees) / 15 * 60);
+    const hours = Math.floor(totalMinutes / 60) % 24;
+    const minutes = totalMinutes % 60;
+    return `${hours}h ${String(minutes).padStart(2, '0')}m`;
+  }
+
+  function formatSiderealTime(degrees) {
+    return formatRightAscension(degrees);
+  }
+
+  function formatPercent(value, decimals = 1) {
+    if (!isFinite(value)) return '--';
+    return `${(value * 100).toFixed(decimals)}%`;
+  }
+
+  function formatMillions(value) {
+    if (!isFinite(value)) return '--';
+    return `${(value / 1000000).toFixed(2)}M`;
+  }
+
+  function formatLightTime(seconds) {
+    if (!isFinite(seconds)) return '--';
+    const minutes = Math.floor(seconds / 60);
+    const remainder = Math.round(seconds % 60);
+    return `${minutes}m ${String(remainder).padStart(2, '0')}s`;
+  }
+
+  function formatSeasonCountdown(event, date) {
+    if (!event) return '--';
+    const remaining = event.date - date;
+    if (remaining <= 0) return event.name;
+    const hours = Math.round(remaining / 3600000);
+    if (hours < 48) return `${event.name} in ${hours}h`;
+    return `${event.name} in ${Math.round(remaining / MS_PER_DAY)}d`;
+  }
+
+  function formatChartClock(date) {
+    return date.toISOString().slice(11, 16) + ' UTC';
+  }
+
   function isValidDate(date) {
     return date && !isNaN(date.getTime());
   }
@@ -585,6 +892,336 @@
     return 'New Moon';
   }
 
+  let lastChartSignature = '';
+
+  function updateSolarDetails(date) {
+    const solarPage = document.getElementById('solar-page');
+    if (!solarPage || solarPage.hidden) return;
+
+    const sun = getSunEquatorial(date);
+    const subsolar = getSubsolarPoint(date);
+    const antisolar = { lat: -subsolar.lat, lng: wrapLng(subsolar.lng + 180) };
+    const orbit = getSolarOrbitStats(date);
+    const target = getSolarDetailsTarget();
+    const position = getSolarPosition(date, target.lat, target.lng);
+    const dayLength = getDayLengthSeconds(date, target.lat, target.lng);
+    const yesterdayLength = getDayLengthSeconds(new Date(date.getTime() - MS_PER_DAY), target.lat, target.lng);
+    const tomorrowLength = getDayLengthSeconds(new Date(date.getTime() + MS_PER_DAY), target.lat, target.lng);
+    const twilight = getTwilightDurations(date, target.lat, target.lng);
+    const nextSeason = getNextSeasonEvent(date);
+    const globalLight = getGlobalLightFractions();
+    const shadowMultiplier = position.altitude > 0 ? 1 / Math.tan(position.altitude * D2R) : null;
+    const noonAltitude = 90 - Math.abs(target.lat - sun.delta);
+    const dailyChangeText = `${orbit.dailyChangeKm >= 0 ? '+' : '-'}${Math.abs(orbit.dailyChangeKm / 1000).toFixed(0)}k km/day`;
+
+    setStatValue('solar-distance-au', `${orbit.distanceAu.toFixed(6)} AU`);
+    setStatValue('solar-distance-km', `${formatMillions(orbit.distanceKm)} km / ${formatMillions(orbit.distanceMiles)} mi`);
+    setStatValue('solar-light-time', formatLightTime(orbit.lightSeconds));
+    setStatValue('solar-orbital-speed', `${orbit.orbitalSpeed.toFixed(2)} km/s`);
+    setStatValue('solar-apparent-size', `${formatDegrees(orbit.apparentDiameterDeg, 3)} / ${(orbit.apparentDiameterDeg * 60).toFixed(2)}'`);
+    setStatValue('solar-energy', `${(orbit.energyRatio * 100).toFixed(2)}% / ${Math.round(orbit.solarConstant)} W/m2`);
+    document.getElementById('solar-distance-trend').textContent = `${orbit.trend} (${dailyChangeText})`;
+
+    setStatValue('earth-axial-tilt', formatDegrees(sun.obliquity, 4));
+    setStatValue('solar-declination', formatSignedDegrees(sun.delta, 3));
+    setStatValue('solar-right-ascension', formatRightAscension(sun.alpha));
+    setStatValue('solar-gmst', formatSiderealTime(sun.gmstDeg));
+    setStatValue('equation-of-time', formatSignedDuration(getEquationOfTimeMinutes(date) * 60));
+    setStatValue('antisolar-point', formatCoord(antisolar.lat, antisolar.lng));
+    document.getElementById('next-season-event').textContent = formatSeasonCountdown(nextSeason, date);
+
+    document.getElementById('detail-target-label').textContent = target.label || 'Selected point';
+    setStatValue('detail-target-coords', formatCoord(target.lat, target.lng));
+    setStatValue('local-sun-altitude', formatSignedDegrees(position.altitude, 2));
+    setStatValue('local-sun-azimuth', `${formatDegrees(position.azimuth, 1)} ${getCompassDirection(position.azimuth)}`);
+    setStatValue('local-sun-zenith', formatDegrees(position.zenith, 2));
+    setStatValue('local-shadow-length', shadowMultiplier ? `${shadowMultiplier >= 99 ? '>99' : shadowMultiplier.toFixed(shadowMultiplier >= 10 ? 0 : 1)}x` : 'No direct Sun');
+    setStatValue('local-noon-altitude', formatSignedDegrees(noonAltitude, 2));
+    setStatValue('local-detail-daylength', formatDuration(dayLength));
+    setStatValue('local-daylength-change', formatSignedDuration((tomorrowLength - yesterdayLength) / 2));
+    setStatValue('local-civil-twilight', twilight.hasTransitions ? formatDuration(twilight.civil) : 'No transitions');
+    setStatValue('local-deep-twilight', twilight.hasTransitions
+      ? `${formatDuration(twilight.nautical)} + ${formatDuration(twilight.astronomical)}`
+      : 'No transitions');
+
+    setGlobalLightRow('global-daylight', 'global-daylight-bar', globalLight.daylight);
+    setGlobalLightRow('global-civil', 'global-civil-bar', globalLight.civil);
+    setGlobalLightRow('global-nautical', 'global-nautical-bar', globalLight.nautical);
+    setGlobalLightRow('global-astro', 'global-astro-bar', globalLight.astronomical);
+    setGlobalLightRow('global-night', 'global-night-bar', globalLight.night);
+    document.getElementById('global-lit-summary').textContent = `Sun up or twilight ${formatPercent(1 - globalLight.night)}`;
+
+    drawSolarCharts(date, target);
+  }
+
+  function setGlobalLightRow(valueId, barId, fraction) {
+    setStatValue(valueId, formatPercent(fraction));
+    document.getElementById(barId).style.width = formatPercent(fraction, 3);
+  }
+
+  function drawSolarCharts(date, target) {
+    const solarPage = document.getElementById('solar-page');
+    const panelWidth = Math.round(solarPage.getBoundingClientRect().width);
+    const signature = [
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate(),
+      date.getUTCHours(),
+      date.getUTCMinutes(),
+      target.lat.toFixed(2),
+      target.lng.toFixed(2),
+      target.label || '',
+      panelWidth
+    ].join('|');
+
+    if (signature === lastChartSignature) return;
+    lastChartSignature = signature;
+
+    drawSolarYearChart(date);
+    drawAnalemmaChart(date);
+    drawDayLengthChart(date, target);
+  }
+
+  function setupCanvas(id) {
+    const canvas = document.getElementById(id);
+    if (!canvas) return null;
+
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.floor(rect.width);
+    const height = Math.floor(rect.height);
+    if (width < 40 || height < 40) return null;
+
+    const ratio = window.devicePixelRatio || 1;
+    const targetWidth = Math.round(width * ratio);
+    const targetHeight = Math.round(height * ratio);
+    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+    }
+
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    return { ctx, width, height };
+  }
+
+  function drawChartGrid(ctx, width, height, padding) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      const y = padding.top + (height - padding.top - padding.bottom) * i / 4;
+      ctx.beginPath();
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(width - padding.right, y);
+      ctx.stroke();
+    }
+    for (let i = 0; i <= 4; i++) {
+      const x = padding.left + (width - padding.left - padding.right) * i / 4;
+      ctx.beginPath();
+      ctx.moveTo(x, padding.top);
+      ctx.lineTo(x, height - padding.bottom);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function plotLine(ctx, points, color, lineWidth = 2) {
+    if (points.length < 2) return;
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function plotCurrentMarker(ctx, x, y, color) {
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#101525';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawLegend(ctx, entries, x, y) {
+    ctx.save();
+    ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textBaseline = 'middle';
+    let cursor = x;
+    entries.forEach(entry => {
+      ctx.fillStyle = entry.color;
+      ctx.fillRect(cursor, y - 3, 10, 6);
+      cursor += 14;
+      ctx.fillStyle = '#cbd1df';
+      ctx.fillText(entry.label, cursor, y);
+      cursor += ctx.measureText(entry.label).width + 12;
+    });
+    ctx.restore();
+  }
+
+  function mapRange(value, inMin, inMax, outMin, outMax) {
+    const t = (value - inMin) / (inMax - inMin);
+    return outMin + clamp(t, 0, 1) * (outMax - outMin);
+  }
+
+  function getYearStartAtCurrentClock(date) {
+    return Date.UTC(
+      date.getUTCFullYear(),
+      0,
+      1,
+      date.getUTCHours(),
+      date.getUTCMinutes(),
+      date.getUTCSeconds(),
+      date.getUTCMilliseconds()
+    );
+  }
+
+  function getDayOfYear(date) {
+    const start = Date.UTC(date.getUTCFullYear(), 0, 1);
+    const today = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+    return Math.floor((today - start) / MS_PER_DAY);
+  }
+
+  function getYearDayCount(year) {
+    return new Date(Date.UTC(year, 1, 29)).getUTCMonth() === 1 ? 366 : 365;
+  }
+
+  function getYearSampleDates(date) {
+    const year = date.getUTCFullYear();
+    const dayCount = getYearDayCount(year);
+    const start = getYearStartAtCurrentClock(date);
+    return Array.from({ length: dayCount }, (_, index) => new Date(start + index * MS_PER_DAY));
+  }
+
+  function drawSolarYearChart(date) {
+    const state = setupCanvas('solar-year-chart');
+    if (!state) return;
+
+    const { ctx, width, height } = state;
+    const padding = { left: 36, right: 12, top: 16, bottom: 20 };
+    const dates = getYearSampleDates(date);
+    const plotWidth = width - padding.left - padding.right;
+    const plotHeight = height - padding.top - padding.bottom;
+    const maxIndex = dates.length - 1;
+    const declinationPoints = [];
+    const distancePoints = [];
+
+    drawChartGrid(ctx, width, height, padding);
+
+    dates.forEach((sampleDate, index) => {
+      const x = padding.left + plotWidth * index / maxIndex;
+      const declination = getSunEquatorial(sampleDate).delta;
+      const distanceAu = getEarthSunDistanceAu(sampleDate);
+      declinationPoints.push({
+        x,
+        y: mapRange(declination, -24, 24, padding.top + plotHeight, padding.top)
+      });
+      distancePoints.push({
+        x,
+        y: mapRange(distanceAu, 0.983, 1.017, padding.top + plotHeight, padding.top)
+      });
+    });
+
+    plotLine(ctx, declinationPoints, '#ffd85c', 2.2);
+    plotLine(ctx, distancePoints, '#63d8ff', 1.8);
+    const currentIndex = clamp(getDayOfYear(date), 0, maxIndex);
+    const currentX = padding.left + plotWidth * currentIndex / maxIndex;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.32)';
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath();
+    ctx.moveTo(currentX, padding.top);
+    ctx.lineTo(currentX, height - padding.bottom);
+    ctx.stroke();
+    ctx.restore();
+    plotCurrentMarker(ctx, declinationPoints[currentIndex].x, declinationPoints[currentIndex].y, '#ffd85c');
+    drawLegend(ctx, [
+      { label: 'declination', color: '#ffd85c' },
+      { label: 'distance', color: '#63d8ff' }
+    ], padding.left, height - 8);
+  }
+
+  function drawAnalemmaChart(date) {
+    const state = setupCanvas('analemma-chart');
+    if (!state) return;
+
+    const { ctx, width, height } = state;
+    const padding = { left: 34, right: 16, top: 16, bottom: 18 };
+    const dates = getYearSampleDates(date);
+    const plotWidth = width - padding.left - padding.right;
+    const plotHeight = height - padding.top - padding.bottom;
+    const points = dates.map(sampleDate => {
+      const eot = getEquationOfTimeMinutes(sampleDate);
+      const declination = getSunEquatorial(sampleDate).delta;
+      return {
+        x: mapRange(eot, -16, 16, padding.left, padding.left + plotWidth),
+        y: mapRange(declination, -24, 24, padding.top + plotHeight, padding.top)
+      };
+    });
+    const currentPoint = {
+      x: mapRange(getEquationOfTimeMinutes(date), -16, 16, padding.left, padding.left + plotWidth),
+      y: mapRange(getSunEquatorial(date).delta, -24, 24, padding.top + plotHeight, padding.top)
+    };
+
+    drawChartGrid(ctx, width, height, padding);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+    ctx.beginPath();
+    ctx.moveTo(mapRange(0, -16, 16, padding.left, padding.left + plotWidth), padding.top);
+    ctx.lineTo(mapRange(0, -16, 16, padding.left, padding.left + plotWidth), height - padding.bottom);
+    ctx.moveTo(padding.left, mapRange(0, -24, 24, padding.top + plotHeight, padding.top));
+    ctx.lineTo(width - padding.right, mapRange(0, -24, 24, padding.top + plotHeight, padding.top));
+    ctx.stroke();
+    ctx.restore();
+    plotLine(ctx, points, '#ffd85c', 2);
+    plotCurrentMarker(ctx, currentPoint.x, currentPoint.y, '#63d8ff');
+    document.getElementById('analemma-clock-label').textContent = formatChartClock(date);
+  }
+
+  function drawDayLengthChart(date, target) {
+    const state = setupCanvas('daylength-chart');
+    if (!state) return;
+
+    const { ctx, width, height } = state;
+    const padding = { left: 34, right: 12, top: 16, bottom: 18 };
+    const dates = getYearSampleDates(date);
+    const plotWidth = width - padding.left - padding.right;
+    const plotHeight = height - padding.top - padding.bottom;
+    const maxIndex = dates.length - 1;
+    const points = dates.map((sampleDate, index) => {
+      const hours = getDayLengthSeconds(sampleDate, target.lat, target.lng) / 3600;
+      return {
+        x: padding.left + plotWidth * index / maxIndex,
+        y: mapRange(hours, 0, 24, padding.top + plotHeight, padding.top)
+      };
+    });
+    const currentIndex = clamp(getDayOfYear(date), 0, maxIndex);
+
+    drawChartGrid(ctx, width, height, padding);
+    plotLine(ctx, points, '#7ee3a6', 2.2);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.32)';
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath();
+    ctx.moveTo(points[currentIndex].x, padding.top);
+    ctx.lineTo(points[currentIndex].x, height - padding.bottom);
+    ctx.stroke();
+    ctx.restore();
+    plotCurrentMarker(ctx, points[currentIndex].x, points[currentIndex].y, '#7ee3a6');
+    document.getElementById('daylength-chart-label').textContent = target.label || 'Selected point';
+  }
+
   function update(date) {
     updateTwilight(date);
 
@@ -603,6 +1240,7 @@
     document.getElementById('moon-phase').textContent = getMoonPhaseName(moonIllum.phase);
     refreshMapPointReadout(date);
     updateBrowserLocalSunReadout(date);
+    updateSolarDetails(date);
   }
 
   let activeMapPoint = null;
@@ -612,6 +1250,7 @@
     const lng = (((latlng.lng + 180) % 360 + 360) % 360) - 180;
     activeMapPoint = { lat, lng, label, timeZone: lookupTimeZone(lat, lng) };
     refreshMapPointReadout();
+    updateSolarDetails(currentTime());
   }
 
   // Show sunrise/sunset for a known location (city or "my location"). The
@@ -620,6 +1259,7 @@
     const normalizedLng = (((lng + 180) % 360 + 360) % 360) - 180;
     activeMapPoint = { lat, lng: normalizedLng, label, timeZone: timeZone || lookupTimeZone(lat, normalizedLng) };
     refreshMapPointReadout();
+    updateSolarDetails(currentTime());
   }
 
   function refreshMapPointReadout(date = currentTime()) {
@@ -891,6 +1531,8 @@
   const timeSliderValue = document.getElementById('time-slider-value');
   const liveBtn = document.getElementById('live-btn');
   const presetBtns = document.querySelectorAll('[data-preset]');
+  const infoPanel = document.getElementById('info-panel');
+  const panelTabs = document.querySelectorAll('[data-panel-page]');
 
   const presets = {
     'mar-equinox': { year: 2026, month: 2, day: 20 },
@@ -909,6 +1551,38 @@
     if (isLive) return new Date();
     return new Date(manualTime.getTime() + sliderOffsetHours * 3600000);
   }
+
+  function setPanelPage(pageId) {
+    document.querySelectorAll('.panel-page').forEach(page => {
+      const active = page.id === pageId;
+      page.hidden = !active;
+      page.classList.toggle('active', active);
+    });
+
+    panelTabs.forEach(tab => {
+      const active = tab.getAttribute('data-panel-page') === pageId;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+
+    infoPanel.classList.toggle('details-active', pageId === 'solar-page');
+
+    if (pageId === 'solar-page') {
+      lastChartSignature = '';
+      updateSolarDetails(currentTime());
+    }
+  }
+
+  panelTabs.forEach(tab => {
+    tab.addEventListener('click', function () {
+      setPanelPage(this.getAttribute('data-panel-page'));
+    });
+  });
+
+  window.addEventListener('resize', function () {
+    lastChartSignature = '';
+    updateSolarDetails(currentTime());
+  });
 
   function findPresetKeyForDate(date) {
     if (!isValidDate(date)) return null;

@@ -26,6 +26,13 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
   - **Click a major city marker** → UTC sunrise/sunset with that city's IANA timezone underneath (e.g. `05:21 PDT` for Seattle, `04:54 BST` for London)
   - **Use My Location** button → centers the map on the browser location and copies that location into the map point card
 - **Browser location context** — displays the browser's IANA timezone immediately, requests browser geolocation on load, shows a blue dot on the map, and fills the nearest major city plus local sunrise/sunset/day length when permission is granted.
+- **Solar Details tab** — dense live stats for the current map time:
+  - Earth-Sun distance in AU, kilometers, miles, and light travel time
+  - Orbital speed, apparent solar diameter, solar energy relative to average, and solar constant estimate
+  - Axial tilt, solar declination, right ascension, GMST, equation of time, antisolar point, and next equinox/solstice countdown
+  - Selected-point Sun altitude, azimuth, zenith angle, shadow length multiplier, solar-noon altitude, day-length change, and twilight durations
+  - Global daylight/twilight/night percentage breakdown
+  - Mini charts for annual declination/distance, the current-time analemma, and selected-location day length
 
 ### Controls
 - **Follow Sun** — auto-pans the map to keep the Sun marker centered. Auto-disables on manual pan/zoom, on city click, and on "Use My Location". Defaults *off* so the first view stays a stable world map.
@@ -73,6 +80,8 @@ The subsolar point and twilight boundaries are computed from first principles �
 - Greenwich Mean Sidereal Time (GMST)
 - Equatorial → subsolar transform: `latitude = declination`, `longitude = RA − GMST` (east-positive)
 - Geodesic spherical caps centered on the **antisolar point** (the antipode of the subsolar point), with angular radius `90° + solar_altitude`
+- Earth-Sun distance from mean anomaly, plus derived light time, orbital speed, apparent solar diameter, solar irradiance ratio, and equation of time
+- Dynamic equinox/solstice countdowns found by numerically refining declination zero-crossings and extrema
 
 The math is verified against standard solstice/equinox values:
 
