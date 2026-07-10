@@ -11,9 +11,20 @@
   const initialLng = parseFloat(urlParams.get('lon'));
   const initialZoom = parseInt(urlParams.get('zoom'), 10);
   const syncViewInUrl = urlParams.has('lat') || urlParams.has('lon') || urlParams.has('zoom');
+  const MAP_VIEW_STORAGE_KEY = 'daylight-map-view';
 
-  const mapCenter = (!isNaN(initialLat) && !isNaN(initialLng)) ? [initialLat, initialLng] : [20, 0];
-  const mapZoom = initialZoom || 3;
+  const storedMapView = syncViewInUrl ? null : getStoredMapView();
+  const hasInitialCenter = !isNaN(initialLat) && !isNaN(initialLng);
+  const mapCenter = hasInitialCenter
+    ? [initialLat, initialLng]
+    : storedMapView
+      ? [storedMapView.lat, storedMapView.lng]
+      : [20, 0];
+  const mapZoom = !isNaN(initialZoom)
+    ? clampZoom(initialZoom)
+    : storedMapView
+      ? storedMapView.zoom
+      : 3;
 
   const map = L.map('map', {
     center: mapCenter,
@@ -81,6 +92,46 @@
   // Wrap longitude to [-180, 180)
   function wrapLng(lng) {
     return ((lng + 180) % 360 + 360) % 360 - 180;
+  }
+
+  function clampZoom(zoom) {
+    return Math.max(2, Math.min(12, Math.round(zoom)));
+  }
+
+  function getStoredMapView() {
+    try {
+      const raw = window.localStorage.getItem(MAP_VIEW_STORAGE_KEY);
+      if (!raw) return null;
+
+      const view = JSON.parse(raw);
+      const lat = parseFloat(view.lat);
+      const lng = parseFloat(view.lng);
+      const zoom = clampZoom(parseInt(view.zoom, 10));
+
+      if (!isFinite(lat) || !isFinite(lng) || !isFinite(zoom)) return null;
+      if (lat < -85 || lat > 85) return null;
+
+      return { lat, lng: wrapLng(lng), zoom };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function saveMapView() {
+    try {
+      const center = map.getCenter();
+      window.localStorage.setItem(MAP_VIEW_STORAGE_KEY, JSON.stringify({
+        lat: Number(center.lat.toFixed(4)),
+        lng: Number(wrapLng(center.lng).toFixed(4)),
+        zoom: map.getZoom()
+      }));
+    } catch (e) {}
+  }
+
+  function clearStoredMapView() {
+    try {
+      window.localStorage.removeItem(MAP_VIEW_STORAGE_KEY);
+    } catch (e) {}
   }
 
   // The daylight/twilight layer is rendered as canvas map tiles instead of
@@ -824,7 +875,9 @@
 
   // "Use My Location" — browser geolocation. Times display in the browser's
   // local timezone, which is correct because the user is physically there.
+  const homeLink = document.getElementById('home-link');
   const myLocationBtn = document.getElementById('my-location-btn');
+  homeLink.addEventListener('click', clearStoredMapView);
   initializeBrowserLocationReadout();
   myLocationBtn.addEventListener('click', function () {
     requestBrowserLocation({ panToLocation: true, showTimes: true, updateButton: true });
@@ -1023,6 +1076,7 @@
   // explicit map view. Time travel still gets a shareable timestamp.
   let permalinkDebounce;
   function updatePermalink() {
+    saveMapView();
     clearTimeout(permalinkDebounce);
     permalinkDebounce = setTimeout(() => {
       const params = new URLSearchParams();

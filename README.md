@@ -49,7 +49,7 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 - **Map point card** — hover/click sunrise and sunset are separate from the browser-location card, so polar hover data cannot be confused with the viewer's local daylight.
 
 ### Permalink state
-Open the title to return to the clean root URL. Exact views can still be opened with `?time=&lat=&lon=&zoom=`. See [Permalink Format](#permalink-format) below.
+Refresh restores the last local map center and zoom while live mode keeps running. Open the title to clear that saved local view and return to the clean root URL. Exact shared views can still be opened with `?time=&lat=&lon=&zoom=`. See [Permalink Format](#permalink-format) below.
 
 ## Tech Stack
 
