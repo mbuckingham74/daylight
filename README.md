@@ -24,8 +24,8 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 - **Location readout** — sunrise, sunset, and day length, shown in one of three modes:
   - **Hover any point** on the map → sunrise/sunset stay in UTC with the coordinate's local civil time underneath
   - **Click a major city marker** → UTC sunrise/sunset with that city's IANA timezone underneath (e.g. `05:21 PDT` for Seattle, `04:54 BST` for London)
-  - **Use My Location** button → browser-location card uses local time, while the map point card keeps UTC plus local time
-- **Browser location context** — displays the browser's IANA timezone immediately, and fills the nearest major city plus local sunrise/sunset/day length when geolocation is already granted or when the viewer clicks **Use My Location**.
+  - **Use My Location** button → centers the map on the browser location and copies that location into the map point card
+- **Browser location context** — displays the browser's IANA timezone immediately, requests browser geolocation on load, shows a blue dot on the map, and fills the nearest major city plus local sunrise/sunset/day length when permission is granted.
 
 ### Controls
 - **Follow Sun** — auto-pans the map to keep the Sun marker centered. Auto-disables on manual pan/zoom, on city click, and on "Use My Location". Defaults *off* so the first view stays a stable world map.
@@ -34,16 +34,17 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 
 ### Time travel
 - **Live button** — return to real-time tracking
-- **±12-hour slider** — scrubs ±12 hours around the current time-travel anchor (which is either "now" in live mode, or the selected preset). The slider and presets compose: clicking a preset sets the anchor, then dragging the slider scrubs around that anchor without jumping back to "now".
-- **Preset selection state** — the active solstice/equinox preset is highlighted while that exact preset time is shown.
-- **Solstice / equinox presets** — jump to:
-  - March equinox 2026 (2026-03-20T14:46:00Z)
-  - June solstice 2026 (2026-06-21T08:24:00Z)
-  - September equinox 2026 (2026-09-23T00:05:00Z)
-  - December solstice 2026 (2026-12-21T20:50:00Z)
+- **±12-hour slider** — scrubs ±12 hours around the current time-travel anchor (which is either "now" in live mode, or the selected seasonal preset date at the viewer's current local clock time). The slider and presets compose: clicking a preset sets the anchor, then dragging the slider scrubs around that anchor without jumping back to "now".
+- **Preset selection state** — the active solstice/equinox preset is highlighted while that seasonal date is shown with no slider offset.
+- **Solstice / equinox presets** — jump to the seasonal date at the viewer's current local clock time:
+  - March equinox date, March 20, 2026
+  - June solstice date, June 21, 2026
+  - September equinox date, September 23, 2026
+  - December solstice date, December 21, 2026
 
 ### Location
-- **Use My Location** button — uses `navigator.geolocation.getCurrentPosition` to center the map on the viewer's location and display their local sunrise/sunset in the browser's timezone. Handles permission-denied / unavailable / timeout with inline button feedback.
+- **Browser geolocation** — calls `navigator.geolocation.getCurrentPosition` on load to populate the local sunrise/sunset card. The **Use My Location** button also centers the map on the viewer's location and copies it into the map point card. Handles permission-denied / unavailable / timeout with inline feedback.
+- **Location marker** — shows the browser-reported location as a blue dot on the map. Clicking the dot copies that location into the map point card without requiring a map pan.
 - **Nearest city** — computed client-side from geolocation against a bundled list of major cities, so no external geocoding service is required.
 - **Map point card** — hover/click sunrise and sunset are separate from the browser-location card, so polar hover data cannot be confused with the viewer's local daylight.
 
@@ -137,7 +138,7 @@ The script:
 ## Permalink Format
 
 ```
-https://daylight.forkstech.com/?time=2026-06-21T08:24:00.000Z&lat=47.6000&lon=-122.3000&zoom=4
+https://daylight.forkstech.com/?time=2026-12-22T02:56:24.000Z&lat=47.6000&lon=-122.3000&zoom=4
 ```
 
 | Param | Description |

@@ -606,6 +606,7 @@
   }
 
   let browserLocation = null;
+  let browserLocationMarker = null;
 
   function getBrowserTimeZone() {
     try {
@@ -680,7 +681,51 @@
   function setBrowserNearestCityStatus(status) {
     document.getElementById('browser-nearest-city').textContent = status;
     browserLocation = null;
+    clearBrowserLocationMarker();
     resetBrowserLocalSunReadout();
+  }
+
+  function clearBrowserLocationMarker() {
+    if (!browserLocationMarker) return;
+    map.removeLayer(browserLocationMarker);
+    browserLocationMarker = null;
+  }
+
+  function updateBrowserLocationMarker(lat, lng, label) {
+    const latlng = [lat, lng];
+
+    if (!browserLocationMarker) {
+      browserLocationMarker = L.circleMarker(latlng, {
+        radius: 8,
+        fillColor: '#2f8cff',
+        color: '#ffffff',
+        weight: 2,
+        opacity: 0.95,
+        fillOpacity: 0.95,
+        interactive: true
+      }).addTo(map);
+
+      browserLocationMarker.on('click', function (e) {
+        L.DomEvent.stopPropagation(e);
+        if (!browserLocation) return;
+        setFollowSun(false);
+        showLocationTimes(
+          browserLocation.lat,
+          browserLocation.lng,
+          browserLocation.label,
+          browserLocation.timeZone
+        );
+      });
+    } else {
+      browserLocationMarker.setLatLng(latlng);
+    }
+
+    browserLocationMarker.bindTooltip(label, {
+      direction: 'top',
+      offset: [0, -10],
+      className: 'city-label'
+    });
+    browserLocationMarker.bringToFront();
   }
 
   function requestBrowserLocation(options = {}) {
@@ -695,6 +740,8 @@
       }
       return;
     }
+
+    setBrowserNearestCityStatus('Locating...');
 
     if (updateButton) {
       myLocationBtn.disabled = true;
@@ -713,6 +760,7 @@
           timeZone: tz,
           label: nearestCity ? nearestCity.name : 'Your location'
         };
+        updateBrowserLocationMarker(lat, lng, browserLocation.label);
         updateBrowserLocalSunReadout();
 
         if (updateButton) {
@@ -756,19 +804,7 @@
       return;
     }
 
-    setBrowserNearestCityStatus('Location not shared');
-
-    if (!navigator.permissions || !navigator.permissions.query) return;
-
-    navigator.permissions.query({ name: 'geolocation' })
-      .then(status => {
-        if (status.state === 'granted') {
-          requestBrowserLocation();
-        } else if (status.state === 'denied') {
-          setBrowserNearestCityStatus('Permission denied');
-        }
-      })
-      .catch(() => {});
+    requestBrowserLocation({ updateButton: true });
   }
 
   let lastHover = null;
@@ -804,10 +840,10 @@
   const presetBtns = document.querySelectorAll('[data-preset]');
 
   const presets = {
-    'mar-equinox': new Date('2026-03-20T14:46:00Z'),
-    'jun-solstice': new Date('2026-06-21T08:24:00Z'),
-    'sep-equinox': new Date('2026-09-23T00:05:00Z'),
-    'dec-solstice': new Date('2026-12-21T20:50:00Z')
+    'mar-equinox': { year: 2026, month: 2, day: 20 },
+    'jun-solstice': { year: 2026, month: 5, day: 21 },
+    'sep-equinox': { year: 2026, month: 8, day: 23 },
+    'dec-solstice': { year: 2026, month: 11, day: 21 }
   };
 
   let followSun = false;
@@ -823,8 +859,48 @@
 
   function findPresetKeyForDate(date) {
     if (!isValidDate(date)) return null;
-    const time = date.getTime();
-    return Object.keys(presets).find(key => presets[key].getTime() === time) || null;
+    return Object.keys(presets).find(key => isSameLocalPresetDate(date, presets[key])) || null;
+  }
+
+  function isSameLocalPresetDate(date, preset) {
+    return date.getFullYear() === preset.year
+      && date.getMonth() === preset.month
+      && date.getDate() === preset.day;
+  }
+
+  function getPresetTimeAtCurrentLocalClock(key) {
+    const preset = presets[key];
+    if (!preset) return null;
+    const now = new Date();
+    return new Date(
+      preset.year,
+      preset.month,
+      preset.day,
+      now.getHours(),
+      now.getMinutes(),
+      now.getSeconds(),
+      now.getMilliseconds()
+    );
+  }
+
+  function formatLocalDateTime(date) {
+    const timeZone = getBrowserTimeZone();
+    const timeZoneLabel = getTimeZoneLabel(timeZone, date);
+    const options = {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    };
+
+    try {
+      const text = date.toLocaleString('en-US', timeZone ? { ...options, timeZone } : options);
+      return timeZoneLabel ? `${text} ${timeZoneLabel}` : text;
+    } catch (e) {
+      return date.toLocaleString('en-US', options);
+    }
   }
 
   function updatePresetSelection() {
@@ -880,7 +956,8 @@
     if (isLive) {
       timeSliderValue.textContent = 'Live';
     } else {
-      timeSliderValue.textContent = target.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+      const utcText = target.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+      timeSliderValue.textContent = `${utcText} / ${formatLocalDateTime(target)}`;
     }
   }
 
@@ -927,8 +1004,9 @@
     btn.addEventListener('click', function () {
       const key = this.getAttribute('data-preset');
       if (presets[key]) {
+        const presetTime = getPresetTimeAtCurrentLocalClock(key);
         isLive = false;
-        manualTime = new Date(presets[key].getTime());
+        manualTime = presetTime;
         sliderOffsetHours = 0;
         selectedPresetKey = key;
         timeSlider.value = 0;
