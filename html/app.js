@@ -21,6 +21,7 @@
   const initialZoom = parseInt(urlParams.get('zoom'), 10);
   const syncViewInUrl = urlParams.has('lat') || urlParams.has('lon') || urlParams.has('zoom');
   const MAP_VIEW_STORAGE_KEY = 'daylight-map-view';
+  const WORLD_OVERVIEW_ZOOM = 2;
 
   const storedMapView = syncViewInUrl ? null : getStoredMapView();
   const hasInitialCenter = !isNaN(initialLat) && !isNaN(initialLng);
@@ -33,7 +34,7 @@
     ? clampZoom(initialZoom)
     : storedMapView
       ? storedMapView.zoom
-      : 3;
+      : WORLD_OVERVIEW_ZOOM;
 
   const map = L.map('map', {
     center: mapCenter,
@@ -1419,8 +1420,13 @@
     browserLocationMarker.bringToFront();
   }
 
+  function centerMapOnBrowserLocation(lat, lng) {
+    setFollowSun(false);
+    map.setView([lat, lng], WORLD_OVERVIEW_ZOOM, { animate: true, duration: 0.8 });
+  }
+
   function requestBrowserLocation(options = {}) {
-    const { panToLocation = false, showTimes = false, updateButton = false } = options;
+    const { centerOnLocation = false, showTimes = false, updateButton = false } = options;
     const myLocationBtn = document.getElementById('my-location-btn');
 
     if (!navigator.geolocation) {
@@ -1459,9 +1465,8 @@
           myLocationBtn.textContent = 'Use My Location';
         }
 
-        if (panToLocation) {
-          setFollowSun(false);
-          map.panTo([lat, lng], { animate: true, duration: 0.8 });
+        if (centerOnLocation) {
+          centerMapOnBrowserLocation(lat, lng);
         }
 
         if (showTimes) {
@@ -1495,7 +1500,7 @@
       return;
     }
 
-    requestBrowserLocation({ updateButton: true });
+    requestBrowserLocation({ centerOnLocation: !syncViewInUrl, updateButton: true });
   }
 
   let lastHover = null;
@@ -1520,7 +1525,7 @@
   homeLink.addEventListener('click', clearStoredMapView);
   initializeBrowserLocationReadout();
   myLocationBtn.addEventListener('click', function () {
-    requestBrowserLocation({ panToLocation: true, showTimes: true, updateButton: true });
+    requestBrowserLocation({ centerOnLocation: true, showTimes: true, updateButton: true });
   });
 
   // UI controls

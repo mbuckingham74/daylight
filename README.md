@@ -24,8 +24,8 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 - **Location readout** — sunrise, sunset, and day length, shown in one of three modes:
   - **Hover any point** on the map → sunrise/sunset stay in UTC with the coordinate's local civil time underneath
   - **Click a major city marker** → UTC sunrise/sunset with that city's IANA timezone underneath (e.g. `05:21 PDT` for Seattle, `04:54 BST` for London)
-  - **Use My Location** button → centers the map on the browser location and copies that location into the map point card
-- **Browser location context** — displays the browser's IANA timezone immediately, requests browser geolocation on load, shows a blue dot on the map, and fills the nearest major city plus local sunrise/sunset/day length when permission is granted.
+  - **Use My Location** button → centers the map on the browser location at the world overview zoom and copies that location into the map point card
+- **Browser location context** — displays the browser's IANA timezone immediately, requests browser geolocation on load, centers the map on the browser location at the world overview zoom, shows a blue dot on the map, and fills the nearest major city plus local sunrise/sunset/day length when permission is granted.
 - **Solar Details tab** — dense live stats for the current map time:
   - Earth-Sun distance in AU, kilometers, miles, and light travel time
   - Orbital speed, apparent solar diameter, solar energy relative to average, and solar constant estimate
@@ -35,7 +35,7 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
   - Mini charts for annual declination/distance, the current-time analemma, and selected-location day length
 
 ### Controls
-- **Follow Sun** — auto-pans the map to keep the Sun marker centered. Auto-disables on manual pan/zoom, on city click, and on "Use My Location". Defaults *off* so the first view stays a stable world map.
+- **Follow Sun** — auto-pans the map to keep the Sun marker centered. Auto-disables on manual pan/zoom, on city click, and on "Use My Location". Defaults *off* so user and shared views are not panned away to the Sun marker.
 - **Show twilight** — toggle the twilight/night overlay on/off
 - **Major cities** — toggle 15 major world city markers and labels. **Markers are clickable** — clicking a city recenters the map and shows that city's sunrise/sunset in the city's own timezone.
 
@@ -50,13 +50,13 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
   - December solstice date, December 21, 2026
 
 ### Location
-- **Browser geolocation** — calls `navigator.geolocation.getCurrentPosition` on load to populate the local sunrise/sunset card. The **Use My Location** button also centers the map on the viewer's location and copies it into the map point card. Handles permission-denied / unavailable / timeout with inline feedback.
+- **Browser geolocation** — calls `navigator.geolocation.getCurrentPosition` on load to center the map on the viewer's location at the world overview zoom and populate the local sunrise/sunset card. Explicit shared map views are preserved instead of being overridden by the automatic geolocation center. The **Use My Location** button always recenters the map on the viewer's location and copies it into the map point card. Handles permission-denied / unavailable / timeout with inline feedback.
 - **Location marker** — shows the browser-reported location as a blue dot on the map. Clicking the dot copies that location into the map point card without requiring a map pan.
 - **Nearest city** — computed client-side from geolocation against a bundled list of major cities, so no external geocoding service is required.
 - **Map point card** — hover/click sunrise and sunset are separate from the browser-location card, so polar hover data cannot be confused with the viewer's local daylight.
 
 ### Permalink state
-Refresh restores the last local map center and zoom while live mode keeps running. Open the title to clear that saved local view and return to the clean root URL. Exact shared views can still be opened with `?time=&lat=&lon=&zoom=`. See [Permalink Format](#permalink-format) below.
+Refresh starts from the last local map center and zoom while live mode keeps running, then granted browser location recenters the clean root view at the world overview zoom. Open the title to clear the saved local view and return to the clean root URL. Exact shared views can still be opened with `?time=&lat=&lon=&zoom=` and are not overridden by automatic geolocation. See [Permalink Format](#permalink-format) below.
 
 ## Tech Stack
 
