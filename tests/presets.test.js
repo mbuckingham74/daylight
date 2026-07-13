@@ -58,11 +58,8 @@ describe('Seasonal presets — hemisphere correctness', () => {
     const june = SM.getSeasonEvents(2026)[1].date;
     const dec = SM.getSeasonEvents(2026)[3].date;
 
-    // London (northern) should have longer day in June than December
-    const londonJune = SM.getSolarSinAltitude(june, 51.5, 0);
-    const londonDec = SM.getSolarSinAltitude(dec, 51.5, 0);
-    // At solar noon on June solstice, Sun should be much higher than at Dec solstice
-    // Just check declination sign as a proxy
+    // At June solstice, declination should be positive (Sun over northern hemisphere)
+    // At December solstice, declination should be negative (Sun over southern hemisphere)
     const juneDec = SM.getSunEquatorial(june).delta;
     const decDec = SM.getSunEquatorial(dec).delta;
     assert.ok(juneDec > 23, `June declination should be ~+23.44, got ${juneDec}`);

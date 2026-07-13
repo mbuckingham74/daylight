@@ -14,28 +14,11 @@
 
   // Parse and validate permalink params on load. Invalid fields are ignored
   // individually so a single bad value doesn't break the whole page.
-  const urlParams = new URLSearchParams(window.location.search);
   const MAP_VIEW_STORAGE_KEY = 'daylight-map-view';
   const TIME_FORMAT_STORAGE_KEY = 'daylight-time-format';
   const WORLD_OVERVIEW_ZOOM = 2;
-  const invalidUrlParams = [];
 
-  const parsedTime = urlParams.has('time') ? new Date(urlParams.get('time')) : null;
-  const initialTime = parsedTime && !isNaN(parsedTime.getTime()) ? parsedTime : null;
-  if (urlParams.has('time') && !initialTime) invalidUrlParams.push('time');
-
-  const parsedLat = parseFloat(urlParams.get('lat'));
-  const parsedLng = parseFloat(urlParams.get('lon'));
-  const parsedZoom = parseInt(urlParams.get('zoom'), 10);
-
-  const initialLat = isFinite(parsedLat) && parsedLat >= -85 && parsedLat <= 85 ? parsedLat : NaN;
-  const initialLng = isFinite(parsedLng) ? wrapLng(parsedLng) : NaN;
-  const initialZoom = isFinite(parsedZoom) ? clampZoom(parsedZoom) : NaN;
-  if (urlParams.has('lat') && isNaN(initialLat)) invalidUrlParams.push('lat');
-  if (urlParams.has('lon') && isNaN(initialLng)) invalidUrlParams.push('lon');
-  if (urlParams.has('zoom') && isNaN(parsedZoom)) invalidUrlParams.push('zoom');
-
-  const syncViewInUrl = !isNaN(initialLat) || !isNaN(initialLng) || !isNaN(initialZoom);
+  const { time: initialTime, lat: initialLat, lng: initialLng, zoom: initialZoom, hasView: syncViewInUrl, invalid: invalidUrlParams } = SM.parsePermalinkParams(window.location.search);
 
   const storedMapView = syncViewInUrl ? null : getStoredMapView();
   const hasInitialCenter = !isNaN(initialLat) && !isNaN(initialLng);

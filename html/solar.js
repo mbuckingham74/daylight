@@ -520,6 +520,41 @@
     return 'Night';
   }
 
+  // ── Permalink parameter parsing ─────────────────────────────────────
+
+  /**
+   * Parse and validate permalink URL parameters. Invalid fields are ignored
+   * individually so a single bad value doesn't break the whole page.
+   *
+   * @param {string} search — the URL search string (e.g. "?time=...&lat=...")
+   * @returns {{ time: Date|null, lat: number, lng: number, zoom: number, hasView: boolean, invalid: string[] }}
+   *   lat/lng/zoom are NaN when absent or invalid. hasView is true if any view param is valid.
+   *   invalid lists the names of params that were present but could not be parsed.
+   */
+  function parsePermalinkParams(search) {
+    const params = new URLSearchParams(search);
+    const invalid = [];
+
+    const parsedTime = params.has('time') ? new Date(params.get('time')) : null;
+    const time = parsedTime && !isNaN(parsedTime.getTime()) ? parsedTime : null;
+    if (params.has('time') && !time) invalid.push('time');
+
+    const rawLat = parseFloat(params.get('lat'));
+    const rawLng = parseFloat(params.get('lon'));
+    const rawZoom = parseInt(params.get('zoom'), 10);
+
+    const lat = isFinite(rawLat) && rawLat >= -85 && rawLat <= 85 ? rawLat : NaN;
+    const lng = isFinite(rawLng) ? wrapLng(rawLng) : NaN;
+    const zoom = isFinite(rawZoom) ? clampZoom(rawZoom) : NaN;
+    if (params.has('lat') && isNaN(lat)) invalid.push('lat');
+    if (params.has('lon') && isNaN(lng)) invalid.push('lon');
+    if (params.has('zoom') && isNaN(rawZoom)) invalid.push('zoom');
+
+    const hasView = !isNaN(lat) || !isNaN(lng) || !isNaN(zoom);
+
+    return { time, lat, lng, zoom, hasView, invalid };
+  }
+
   // ── Public API ──────────────────────────────────────────────────────
 
   return {
@@ -572,6 +607,8 @@
     // SunCalc-dependent (dependency injection)
     getDayLengthSeconds,
     // Labels
-    getLightStateLabel
+    getLightStateLabel,
+    // Permalink
+    parsePermalinkParams
   };
 }));
