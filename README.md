@@ -41,13 +41,13 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 
 ### Time travel
 - **Live button** — return to real-time tracking
-- **±12-hour slider** — scrubs ±12 hours around the current time-travel anchor (which is either "now" in live mode, or the selected seasonal preset date at the viewer's current local clock time). The slider and presets compose: clicking a preset sets the anchor, then dragging the slider scrubs around that anchor without jumping back to "now".
-- **Preset selection state** — the active solstice/equinox preset is highlighted while that seasonal date is shown with no slider offset.
-- **Solstice / equinox presets** — jump to the seasonal date at the viewer's current local clock time:
-  - March equinox date, March 20, 2026
-  - June solstice date, June 21, 2026
-  - September equinox date, September 23, 2026
-  - December solstice date, December 21, 2026
+- **±12-hour slider** — scrubs ±12 hours around the current time-travel anchor (which is either "now" in live mode, or the selected seasonal preset event instant). The slider and presets compose: clicking a preset sets the anchor to the exact event instant, then dragging the slider scrubs around that anchor without jumping back to "now".
+- **Preset selection state** — the active solstice/equinox preset is highlighted while that seasonal event instant is shown with no slider offset.
+- **Solstice / equinox presets** — jump to the exact calculated instant of the seasonal event (not just the calendar date at an arbitrary time). Events are computed dynamically for the active time-travel year (or the current year when live), so they remain correct across year boundaries and leap years. Hover a preset button to see the exact UTC date and time of the event:
+  - March equinox (e.g., 2026-03-20 14:38 UTC)
+  - June solstice (e.g., 2026-06-21 08:24 UTC)
+  - September equinox (e.g., 2026-09-23 00:17 UTC)
+  - December solstice (e.g., 2026-12-21 20:54 UTC)
 
 ### Location
 - **Browser geolocation** — calls `navigator.geolocation.getCurrentPosition` on load to center the map on the viewer's location at the world overview zoom and populate the local sunrise/sunset card. Explicit shared map views are preserved instead of being overridden by the automatic geolocation center. The **Use My Location** button always recenters the map on the viewer's location and copies it into the map point card. Handles permission-denied / unavailable / timeout with inline feedback.
@@ -63,7 +63,7 @@ Refresh starts from the last local map center and zoom while live mode keeps run
 | Layer | Tool |
 |-------|------|
 | Mapping | [Leaflet](https://leafletjs.com/) 1.9.4 |
-| Solar position (subsolar + twilight) | Self-contained first-principles algorithm (low-precision solar position + GMST + geodesic spherical caps) |
+| Solar position (subsolar + twilight) | Self-contained first-principles algorithm (low-precision solar position + GMST + geodesic spherical caps), extracted into `html/solar.js` for unit testing |
 | Auxiliary solar/lunar data | [SunCalc](https://github.com/mourner/suncalc) 1.9.0 — used only for Greenwich solar noon, moon phase, and hover sunrise/sunset/day-length |
 | Timezone lookup | [tz-lookup](https://github.com/darkskyapp/tz-lookup-oss) 6.1.25 — maps arbitrary lat/lng points to IANA timezones for local civil time |
 | Base map | Esri World Dark Gray Base + Boundaries & Places |
@@ -106,11 +106,17 @@ Longitudes are **east-positive** throughout, matching both Leaflet and SunCalc:
 .
 ├── html/
 │   ├── index.html          # Main page
-│   ├── app.js              # Map, astronomy, UI logic (self-contained, no build step)
+│   ├── solar.js            # Pure solar/astronomy math (UMD module, testable in Node)
+│   ├── app.js              # Map, UI logic (depends on solar.js)
 │   ├── style.css           # Styling
 │   └── favicon.svg         # Site icon
+├── tests/
+│   ├── solar.test.js       # Unit tests for solar math (node:test runner)
+│   └── presets.test.js     # Seasonal preset and year-boundary tests
 ├── docker-compose.yml      # nginx static container
 ├── deploy.sh               # One-command deploy to the VPS
+├── package.json            # Dev tooling (ESLint, tests)
+├── eslint.config.js        # ESLint 9 flat config
 ├── README.md               # This file
 └── .gitignore
 ```
@@ -128,6 +134,17 @@ npx serve html
 ```
 
 Then open http://localhost:8000.
+
+### Testing and Linting
+
+The project has no build step, but includes development-only tooling:
+
+```bash
+npm install        # install ESLint
+npm test           # run unit tests (Node built-in test runner)
+npm run lint       # run ESLint on JS files
+npm run check      # run both lint and tests
+```
 
 ## Deployment
 

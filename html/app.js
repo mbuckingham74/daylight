@@ -1298,12 +1298,23 @@
   const panelTabs = document.querySelectorAll('[data-panel-page]');
   const timeFormatBtns = document.querySelectorAll('[data-time-format]');
 
-  const presets = {
-    'mar-equinox': { year: 2026, month: 2, day: 20 },
-    'jun-solstice': { year: 2026, month: 5, day: 21 },
-    'sep-equinox': { year: 2026, month: 8, day: 23 },
-    'dec-solstice': { year: 2026, month: 11, day: 21 }
-  };
+  const PRESET_KEYS = ['mar-equinox', 'jun-solstice', 'sep-equinox', 'dec-solstice'];
+
+  function getPresetEventDate(key, year) {
+    const events = SM.getSeasonEvents(year);
+    switch (key) {
+      case 'mar-equinox': return events[0].date;
+      case 'jun-solstice': return events[1].date;
+      case 'sep-equinox': return events[2].date;
+      case 'dec-solstice': return events[3].date;
+      default: return null;
+    }
+  }
+
+  function getActiveYear() {
+    if (isLive || !manualTime) return new Date().getFullYear();
+    return manualTime.getFullYear();
+  }
 
   let followSun = false;
   let isLive = !initialTime;
@@ -1374,28 +1385,15 @@
 
   function findPresetKeyForDate(date) {
     if (!isValidDate(date)) return null;
-    return Object.keys(presets).find(key => isSameLocalPresetDate(date, presets[key])) || null;
+    const year = date.getUTCFullYear();
+    return PRESET_KEYS.find(key => {
+      const eventDate = getPresetEventDate(key, year);
+      return eventDate && Math.abs(date.getTime() - eventDate.getTime()) < 3600000;
+    }) || null;
   }
 
-  function isSameLocalPresetDate(date, preset) {
-    return date.getFullYear() === preset.year
-      && date.getMonth() === preset.month
-      && date.getDate() === preset.day;
-  }
-
-  function getPresetTimeAtCurrentLocalClock(key) {
-    const preset = presets[key];
-    if (!preset) return null;
-    const now = new Date();
-    return new Date(
-      preset.year,
-      preset.month,
-      preset.day,
-      now.getHours(),
-      now.getMinutes(),
-      now.getSeconds(),
-      now.getMilliseconds()
-    );
+  function getPresetEventDateForActiveYear(key) {
+    return getPresetEventDate(key, getActiveYear());
   }
 
   function formatLocalDateTime(date) {
@@ -1419,8 +1417,16 @@
   }
 
   function updatePresetSelection() {
+    const activeYear = getActiveYear();
     presetBtns.forEach(btn => {
       const key = btn.getAttribute('data-preset');
+      const eventDate = getPresetEventDate(key, activeYear);
+      if (eventDate) {
+        btn.title = eventDate.toLocaleString('en-US', {
+          year: 'numeric', month: 'short', day: 'numeric',
+          hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short'
+        });
+      }
       const active = !isLive && sliderOffsetHours === 0 && selectedPresetKey === key;
       btn.classList.toggle('active', active);
       btn.setAttribute('aria-pressed', active ? 'true' : 'false');
@@ -1518,10 +1524,10 @@
   presetBtns.forEach(btn => {
     btn.addEventListener('click', function () {
       const key = this.getAttribute('data-preset');
-      if (presets[key]) {
-        const presetTime = getPresetTimeAtCurrentLocalClock(key);
+      const presetTime = getPresetEventDateForActiveYear(key);
+      if (presetTime) {
         isLive = false;
-        manualTime = presetTime;
+        manualTime = new Date(presetTime.getTime());
         sliderOffsetHours = 0;
         selectedPresetKey = key;
         timeSlider.value = 0;
