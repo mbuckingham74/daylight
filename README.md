@@ -139,10 +139,12 @@ Longitudes are **east-positive** throughout, matching both Leaflet and SunCalc:
 ├── tests/
 │   ├── solar.test.js       # Unit tests for solar math (node:test runner)
 │   └── presets.test.js     # Seasonal preset and year-boundary tests
-├── docker-compose.yml      # nginx static container
+├── docker-compose.yml      # nginx static container with healthcheck
+├── nginx.conf              # nginx config: gzip, caching, security headers, CSP Report-Only
 ├── deploy.sh               # One-command deploy to the VPS
 ├── package.json            # Dev tooling (ESLint, tests)
 ├── eslint.config.js        # ESLint 9 flat config
+├── .github/workflows/ci.yml # GitHub Actions: lint + test on push/PR
 ├── README.md               # This file
 └── .gitignore
 ```
@@ -183,9 +185,21 @@ To deploy from this repo:
 ```
 
 The script:
-1. Syncs `docker-compose.yml` and `html/` to `/home/michael/docker-configs/daylight/` on the VPS
+1. Syncs `docker-compose.yml`, `nginx.conf`, and `html/` to `/home/michael/docker-configs/daylight/` on the VPS
 2. Pulls the latest `nginx:alpine` image
 3. Recreates/starts the `daylight-static` container
+
+The nginx configuration (`nginx.conf`) provides:
+- Gzip compression for CSS, JS, JSON, and SVG
+- Long-term caching for versioned assets (files with `?v=` query params)
+- `no-cache` revalidation for `index.html`
+- Security headers (X-Frame-Options, X-Content-Type-Options, Referrer-Policy)
+- CSP in Report-Only mode (move to enforcement after reviewing violations)
+- Container healthcheck via `wget --spider`
+
+### CI
+
+GitHub Actions runs ESLint and unit tests on every push and pull request. See `.github/workflows/ci.yml`.
 
 ## Permalink Format
 

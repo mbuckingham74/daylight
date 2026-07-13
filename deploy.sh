@@ -12,6 +12,7 @@ ssh "${SERVER}" "mkdir -p ${REMOTE_DIR}/html"
 # Sync source files
 rsync -avz --delete \
   "${PWD}/docker-compose.yml" \
+  "${PWD}/nginx.conf" \
   "${SERVER}:${REMOTE_DIR}/"
 
 rsync -avz --delete \
