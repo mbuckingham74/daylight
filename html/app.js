@@ -1293,14 +1293,16 @@
   }
 
   function initializeBrowserLocationReadout() {
+    // Show the browser timezone immediately — this does not require permission.
     updateBrowserTimezoneReadout();
 
+    // Show a prompt instead of automatically requesting coordinates.
+    // The user must click "Use My Location" to consent to geolocation.
     if (!navigator.geolocation) {
-      setBrowserNearestCityStatus('Unavailable');
-      return;
+      setBrowserNearestCityStatus('Geolocation unsupported');
+    } else {
+      setBrowserNearestCityStatus('Click "Use My Location"');
     }
-
-    requestBrowserLocation({ centerOnLocation: !syncViewInUrl, updateButton: true });
   }
 
   let lastHover = null;
