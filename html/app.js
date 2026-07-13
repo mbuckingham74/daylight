@@ -1343,6 +1343,23 @@
   const timeFormatBtns = document.querySelectorAll('[data-time-format]');
   const datetimeInput = document.getElementById('datetime-input');
   const datetimeUtcHint = document.getElementById('datetime-utc-hint');
+  const panelHandle = document.getElementById('panel-handle');
+
+  // ── Mobile bottom sheet: collapsed/half/full states ─────────────────
+  // Tapping the handle cycles through states. State is not persisted to
+  // avoid trapping a returning user in a confusing layout.
+  const panelStates = ['collapsed', 'half', 'full'];
+  let panelStateIndex = 1;
+
+  function applyPanelState() {
+    panelStates.forEach(s => infoPanel.classList.remove(s));
+    infoPanel.classList.add(panelStates[panelStateIndex]);
+  }
+
+  panelHandle.addEventListener('click', function () {
+    panelStateIndex = (panelStateIndex + 1) % panelStates.length;
+    applyPanelState();
+  });
 
   const PRESET_KEYS = ['mar-equinox', 'jun-solstice', 'sep-equinox', 'dec-solstice'];
 
