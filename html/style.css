@@ -522,6 +522,13 @@ html, body {
   border-color: rgba(255, 203, 68, 0.9);
 }
 
+.accuracy-note {
+  margin: 10px 0 0 0;
+  font-size: 0.68rem;
+  color: #8b93a8;
+  line-height: 1.4;
+}
+
 /* Leaflet customizations */
 .leaflet-container {
   background: #0b1026;

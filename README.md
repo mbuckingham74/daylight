@@ -83,6 +83,22 @@ The subsolar point and twilight boundaries are computed from first principles �
 - Earth-Sun distance from mean anomaly, plus derived light time, orbital speed, apparent solar diameter, solar irradiance ratio, and equation of time
 - Dynamic equinox/solstice countdowns found by numerically refining declination zero-crossings and extrema
 
+### Accuracy envelope
+
+The algorithms are low-precision but sufficient for visualization. The supported date range and approximate accuracies are:
+
+| Quantity | Supported range | Approximate accuracy | Source |
+|----------|----------------|---------------------|--------|
+| Subsolar latitude (declination) | 1900–2100 | ±0.01° | Meeus ch. 25 |
+| Subsolar longitude (GMST) | 1900–2100 | ±0.01° | IERS 1996 GMST |
+| Earth-Sun distance | 1900–2100 | ±1×10⁻⁵ AU | Meeus ch. 25 |
+| Equation of time | 1900–2100 | ±0.1 minutes | Meeus ch. 28 |
+| Equinox/solstice times | 1900–2100 | ±2 minutes | Numerical refinement |
+| Sunrise/sunset (SunCalc) | 1900–2100 | ±1 minute (mid-latitudes) | SunCalc / refraction model |
+| Twilight thresholds | Any | Exact (defined by altitude angle) | Standard definitions |
+
+Outside the 1900–2100 range, the obliquity and eccentricity formulas accumulate larger errors. Dates far outside this range should not be relied upon for precise solar positions.
+
 The math is verified against standard solstice/equinox values:
 
 | Event | Subsolar Latitude | Verified |
@@ -91,6 +107,8 @@ The math is verified against standard solstice/equinox values:
 | June solstice 2026 | +23.44° | ✓ |
 | September equinox 2026 | −0.03° | ✓ |
 | December solstice 2026 | −23.44° | ✓ |
+
+Unit tests (run with `npm test`) verify declination bounds across multiple years, sunrise/sunset tolerance, polar day/night, antimeridian wrapping, leap day handling, and URL parameter validation.
 
 ### Longitude convention
 
