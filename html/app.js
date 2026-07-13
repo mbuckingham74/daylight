@@ -958,15 +958,24 @@
     document.getElementById('daylength-chart-label').textContent = target.label || 'Selected point';
   }
 
-  function update(date) {
-    updateTwilight(date);
+  // ── State-aware update scheduler ────────────────────────────────────
+  // The clock display updates every second. The expensive twilight tile
+  // redraw and chart rendering run at a reduced rate (~20s) in live mode
+  // and immediately on manual interaction (slider, preset, resize, hover settle).
 
+  const LIVE_HEAVY_INTERVAL_MS = 20000;
+  let lastHeavyUpdateMs = 0;
+
+  function updateClock(date) {
     const subsolar = getSubsolarPoint(date);
     subsolarMarker.setLatLng([subsolar.lat, subsolar.lng]);
     subsolarLabel.setLatLng([subsolar.lat, subsolar.lng]);
-
     document.getElementById('utc-time').textContent = `${formatUtcDate(date)} ${formatClockTz(date, 'UTC')} UTC`;
     document.getElementById('sun-position').textContent = formatCoord(subsolar.lat, subsolar.lng);
+  }
+
+  function updateHeavy(date) {
+    updateTwilight(date);
 
     const greenwich = SunCalc.getTimes(date, 51.4769, -0.0005);
     const solarNoon = greenwich.solarNoon;
@@ -977,16 +986,35 @@
     refreshMapPointReadout(date);
     updateBrowserLocalSunReadout(date);
     updateSolarDetails(date);
+
+    lastHeavyUpdateMs = Date.now();
+  }
+
+  function update(date) {
+    updateClock(date);
+    updateHeavy(date);
   }
 
   let activeMapPoint = null;
+  let hoverDebounceTimer = null;
+  const HOVER_DEBOUNCE_MS = 200;
 
   function updateHover(latlng, label = 'Hovered map point') {
     const lat = latlng.lat;
     const lng = (((latlng.lng + 180) % 360 + 360) % 360) - 180;
     activeMapPoint = { lat, lng, label, timeZone: lookupTimeZone(lat, lng) };
-    refreshMapPointReadout();
-    updateSolarDetails(currentTime());
+
+    // Update coordinates immediately (cheap)
+    document.getElementById('location-info').querySelector('h2').textContent = label;
+    document.getElementById('hover-coords').textContent = formatCoord(lat, lng);
+
+    // Debounce the expensive sunrise/sunset and chart updates
+    clearTimeout(hoverDebounceTimer);
+    hoverDebounceTimer = setTimeout(() => {
+      refreshMapPointReadout();
+      updateSolarDetails(currentTime());
+      hoverDebounceTimer = null;
+    }, HOVER_DEBOUNCE_MS);
   }
 
   // Show sunrise/sunset for a known location (city or "my location"). The
@@ -1565,8 +1593,18 @@
   }
 
   function tick() {
+    if (document.hidden) return;
+
     const now = currentTime();
-    update(now);
+    const nowMs = Date.now();
+
+    // Clock display updates every second (cheap)
+    updateClock(now);
+
+    // Heavy updates (twilight tiles, charts) run at a reduced rate in live mode
+    if (!isLive || nowMs - lastHeavyUpdateMs >= LIVE_HEAVY_INTERVAL_MS) {
+      updateHeavy(now);
+    }
 
     if (isLive) {
       updateSliderLabel();
@@ -1582,6 +1620,16 @@
       }
     }
   }
+
+  // Skip expensive work while the document is hidden. On visibility return,
+  // catch up once immediately and resume the normal scheduler.
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) {
+      const now = currentTime();
+      update(now);
+      if (isLive) updateSliderLabel();
+    }
+  });
 
   updateTimeFormatButtons();
   update(currentTime());

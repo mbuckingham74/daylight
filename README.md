@@ -8,6 +8,8 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 
 ### Visualization
 - **Live day/night visualization** with accurate Sun tracking
+- **State-aware update scheduler** — the clock display updates every second, but the expensive twilight tile redraw and chart rendering run every ~20 seconds in live mode. Manual interactions (slider, presets, resize, tab switch) render immediately. Work is skipped entirely while the browser tab is hidden and catches up on return.
+- **Debounced hover feedback** — map coordinates update instantly on hover, while sunrise/sunset times and chart rebuilds are debounced ~200 ms to avoid redundant SunCalc calls during continuous mouse movement.
 - **Smooth twilight gradient** instead of a hard terminator:
   - Civil twilight (sun 0° to −6° altitude)
   - Nautical twilight (sun −6° to −12°)
