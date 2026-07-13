@@ -43,7 +43,10 @@
       <div class="location browser-location-card" id="browser-location-info">
         <div class="location-header">
           <h2>Browser Location</h2>
-          <button id="my-location-btn" type="button" title="Request your browser location to center the map and show local sunrise/sunset. Your coordinates are not shared or stored.">Use My Location</button>
+          <div class="location-actions">
+            <button id="share-btn" type="button" title="Copy or share a link to the current view">Share</button>
+            <button id="my-location-btn" type="button" title="Request your browser location to center the map and show local sunrise/sunset. Your coordinates are not shared or stored.">Use My Location</button>
+          </div>
         </div>
         <div class="browser-location" aria-live="polite">
           <div class="stat">
@@ -146,6 +149,11 @@
           <button data-preset="jun-solstice">Jun Sol</button>
           <button data-preset="sep-equinox">Sep Eq</button>
           <button data-preset="dec-solstice">Dec Sol</button>
+        </div>
+        <div class="datetime-control">
+          <label for="datetime-input" class="slider-label">Specific date & time (local)</label>
+          <input type="datetime-local" id="datetime-input" />
+          <span class="datetime-utc-hint" id="datetime-utc-hint"></span>
         </div>
         <p class="accuracy-note">Solar positions are accurate to ~0.01° for dates 1900–2100. Sunrise/sunset times use SunCalc with a ±1 minute tolerance at mid-latitudes.</p>
       </div>

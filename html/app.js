@@ -1341,6 +1341,8 @@
   const infoPanel = document.getElementById('info-panel');
   const panelTabs = document.querySelectorAll('[data-panel-page]');
   const timeFormatBtns = document.querySelectorAll('[data-time-format]');
+  const datetimeInput = document.getElementById('datetime-input');
+  const datetimeUtcHint = document.getElementById('datetime-utc-hint');
 
   const PRESET_KEYS = ['mar-equinox', 'jun-solstice', 'sep-equinox', 'dec-solstice'];
 
@@ -1570,6 +1572,48 @@
     updateSliderLabel();
   }
 
+  // ── Datetime-local picker ───────────────────────────────────────────
+  // Allows arbitrary date/time selection in the viewer's local timezone.
+  // Shows the UTC equivalent and warns outside the 1900–2100 accuracy range.
+  function formatDateTimeLocal(date) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  function updateDateTimeInput() {
+    if (isLive) {
+      datetimeInput.value = '';
+      datetimeInput.placeholder = 'Live mode — click to pick a time';
+      datetimeUtcHint.textContent = '';
+    } else {
+      datetimeInput.value = formatDateTimeLocal(manualTime);
+      const utcText = `${formatUtcDate(manualTime)} ${formatTime(manualTime)} UTC`;
+      const year = manualTime.getFullYear();
+      const outOfRange = year < 1900 || year > 2100;
+      datetimeUtcHint.textContent = outOfRange
+        ? `${utcText} — ⚠ outside 1900–2100 accuracy range`
+        : utcText;
+      datetimeUtcHint.classList.toggle('datetime-warning', outOfRange);
+    }
+  }
+
+  datetimeInput.addEventListener('change', function () {
+    if (!this.value) return;
+    const parsed = new Date(this.value);
+    if (isNaN(parsed.getTime())) return;
+    isLive = false;
+    manualTime = parsed;
+    sliderOffsetHours = 0;
+    selectedPresetKey = null;
+    timeSlider.value = 0;
+    liveBtn.classList.remove('active');
+    updateSliderLabel();
+    updateDateTimeInput();
+    updatePresetSelection();
+    update(currentTime());
+    updatePermalink();
+  });
+
   let sliderRaf = null;
   timeSlider.addEventListener('input', function () {
     if (isLive) {
@@ -1581,6 +1625,7 @@
     }
     sliderOffsetHours = parseFloat(this.value);
     updateSliderLabel();
+    updateDateTimeInput();
     updatePresetSelection();
     updatePermalink();
     if (sliderRaf) cancelAnimationFrame(sliderRaf);
@@ -1597,6 +1642,7 @@
     timeSlider.value = 0;
     selectedPresetKey = null;
     updateSliderLabel();
+    updateDateTimeInput();
     updatePresetSelection();
     update(currentTime());
     liveBtn.classList.add('active');
@@ -1615,6 +1661,7 @@
         timeSlider.value = 0;
         liveBtn.classList.remove('active');
         updateSliderLabel();
+        updateDateTimeInput();
         updatePresetSelection();
         update(currentTime());
         updatePermalink();
@@ -1650,6 +1697,79 @@
 
   map.on('moveend', updatePermalink);
   map.on('zoomend', updatePermalink);
+
+  // ── Share / Copy Link ───────────────────────────────────────────────
+  // Generate a canonical share URL that always includes the current time,
+  // view, and zoom — unlike the address bar, which omits view params on a
+  // clean-root session. Never includes browser geolocation unless the user
+  // explicitly shared a URL that contained it.
+  function buildShareUrl() {
+    const params = new URLSearchParams();
+    const time = currentTime();
+    if (!isLive) {
+      params.set('time', time.toISOString());
+    }
+    const center = map.getCenter();
+    params.set('lat', center.lat.toFixed(4));
+    params.set('lon', wrapLng(center.lng).toFixed(4));
+    params.set('zoom', map.getZoom());
+    return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+  }
+
+  function showShareFeedback(message) {
+    const shareBtn = document.getElementById('share-btn');
+    const originalText = shareBtn.textContent;
+    shareBtn.textContent = message;
+    shareBtn.disabled = true;
+    setTimeout(() => {
+      shareBtn.textContent = originalText;
+      shareBtn.disabled = false;
+    }, 2000);
+  }
+
+  const shareBtn = document.getElementById('share-btn');
+  shareBtn.addEventListener('click', function () {
+    const url = buildShareUrl();
+
+    if (navigator.share) {
+      navigator.share({
+        title: 'Daylight Map',
+        text: 'Day and night regions across the planet',
+        url: url
+      }).then(() => {
+        showShareFeedback('Shared');
+      }).catch(() => {});
+      return;
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(() => {
+        showShareFeedback('Copied!');
+      }).catch(() => {
+        fallbackCopyToClipboard(url);
+      });
+      return;
+    }
+
+    fallbackCopyToClipboard(url);
+  });
+
+  function fallbackCopyToClipboard(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'absolute';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand('copy');
+      showShareFeedback('Copied!');
+    } catch (e) {
+      showShareFeedback('Copy failed');
+    }
+    document.body.removeChild(textarea);
+  }
 
   function showUrlParamNotice(params) {
     const notice = document.createElement('div');
@@ -1707,6 +1827,7 @@
   subsolarLabel.addTo(map);
   timeSlider.value = 0;
   updateSliderLabel();
+  updateDateTimeInput();
   if (initialTime) {
     liveBtn.classList.remove('active');
   }

@@ -50,6 +50,10 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
   - June solstice (e.g., 2026-06-21 08:24 UTC)
   - September equinox (e.g., 2026-09-23 00:17 UTC)
   - December solstice (e.g., 2026-12-21 20:54 UTC)
+- **Specific date & time picker** — a `datetime-local` input allows jumping to any date and time in the viewer's local timezone. The UTC equivalent is shown below the input, with a warning if the date is outside the 1900–2100 accuracy range. Works alongside the slider: pick a date to set the anchor, then use the slider for ±12 hour fine-tuning.
+
+### Sharing
+- **Share button** — generates a canonical share URL that always includes the current time, map center, and zoom (unlike the address bar, which omits view params on a clean-root session). Uses `navigator.share` when available (mobile), with clipboard copy fallback. Browser geolocation coordinates are never included unless the user explicitly shared a URL that contained them.
 
 ### Location
 - **Browser geolocation** — calls `navigator.geolocation.getCurrentPosition` only after an explicit click on the "Use My Location" button. Does not request location automatically on load. The button centers the map on the viewer's location at the world overview zoom and populates the local sunrise/sunset card. Explicit shared map views are preserved instead of being overridden by geolocation. Handles permission-denied / unavailable / timeout with inline feedback.

@@ -310,6 +310,34 @@ html, body {
   margin-bottom: 12px;
 }
 
+.location-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+#share-btn {
+  background: rgba(91, 140, 255, 0.15);
+  border: 1px solid rgba(91, 140, 255, 0.4);
+  color: #5b8cff;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+#share-btn:hover:not(:disabled) {
+  background: rgba(91, 140, 255, 0.28);
+}
+
+#share-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
 .location h2 {
   margin: 0;
   font-size: 0.9rem;
@@ -548,6 +576,37 @@ html, body {
   font-size: 0.68rem;
   color: #8b93a8;
   line-height: 1.4;
+}
+
+.datetime-control {
+  margin-top: 10px;
+}
+
+.datetime-control input[type="datetime-local"] {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f0f3fa;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.datetime-control input[type="datetime-local"]:focus {
+  outline: none;
+  border-color: #5b8cff;
+}
+
+.datetime-utc-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.7rem;
+  color: #8b93a8;
+}
+
+.datetime-warning {
+  color: #e8a44a;
 }
 
 /* Leaflet customizations */
