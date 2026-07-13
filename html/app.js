@@ -1,6 +1,24 @@
 (function () {
   'use strict';
 
+  // ── Dependency check ────────────────────────────────────────────────
+  // If a required library failed to load from its CDN, show a non-blocking
+  // error with a reload button. SolarMath is bundled locally so it should
+  // always be available.
+  const missingDeps = [];
+  if (!window.SolarMath) missingDeps.push('Solar math module');
+  if (!window.L) missingDeps.push('Leaflet (map library)');
+  if (!window.SunCalc) missingDeps.push('SunCalc (sunrise/sunset times)');
+
+  if (missingDeps.length > 0) {
+    const banner = document.createElement('div');
+    banner.className = 'loading-error';
+    banner.setAttribute('role', 'alert');
+    banner.innerHTML = `<strong>${missingDeps.join(' and ')} could not be loaded.</strong><br>The map cannot run without it.<br><button onclick="window.location.reload()">Reload page</button>`;
+    document.body.appendChild(banner);
+    return;
+  }
+
   const SM = window.SolarMath;
   const {
     D2R, MS_PER_DAY, TWILIGHT_THRESHOLDS,

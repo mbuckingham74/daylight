@@ -16,6 +16,8 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
   - Astronomical twilight (sun −12° to −18°)
   - Night core (sun below −18°)
 - **Sun marker** showing where the Sun is directly overhead
+- **Twilight legend** — a collapsible legend explaining each color band (daylight, civil, nautical, astronomical, night) and the −0.833° refraction convention used for sunrise/sunset
+- **Loading/failure states** — if a required dependency (Leaflet, SunCalc, solar.js) fails to load from its CDN, a non-blocking error banner appears with a reload button instead of a blank page
 - **Muted dark terrain-style base map** (Esri World Dark Gray Base + Boundaries & Places overlay) so the terminator stays the star
 
 ### Info panel
