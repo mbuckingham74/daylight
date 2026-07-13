@@ -372,7 +372,7 @@
 
       marker.on('click', function (e) {
         L.DomEvent.stopPropagation(e);
-        map.panTo([city.lat, city.lng], { animate: true, duration: 0.8 });
+        map.panTo([city.lat, city.lng], panOptions(0.8));
         setFollowSun(false);
         showLocationTimes(city.lat, city.lng, city.name, city.tz);
       });
@@ -886,6 +886,13 @@
       { label: 'declination', color: '#ffd85c' },
       { label: 'distance', color: '#63d8ff' }
     ], padding.left, height - 8);
+
+    const currentDelta = getSunEquatorial(date).delta;
+    const currentDist = getEarthSunDistanceAu(date);
+    const descEl = document.getElementById('solar-year-chart-desc');
+    if (descEl) {
+      descEl.textContent = `Declination and distance curves for ${date.getUTCFullYear()}. Current declination: ${formatSignedDegrees(currentDelta, 3)}. Earth-Sun distance: ${currentDist.toFixed(5)} AU. Day ${getDayOfYear(date) + 1} of ${dates.length}.`;
+    }
   }
 
   function drawAnalemmaChart(date) {
@@ -923,6 +930,13 @@
     plotLine(ctx, points, '#ffd85c', 2);
     plotCurrentMarker(ctx, currentPoint.x, currentPoint.y, '#63d8ff');
     document.getElementById('analemma-clock-label').textContent = formatChartClock(date);
+
+    const currentEot = getEquationOfTimeMinutes(date);
+    const currentDecl = getSunEquatorial(date).delta;
+    const descEl = document.getElementById('analemma-chart-desc');
+    if (descEl) {
+      descEl.textContent = `Analemma for ${formatChartClock(date)}. Equation of time: ${currentEot >= 0 ? '+' : ''}${currentEot.toFixed(1)} minutes. Solar declination: ${formatSignedDegrees(currentDecl, 3)}.`;
+    }
   }
 
   function drawDayLengthChart(date, target) {
@@ -956,6 +970,23 @@
     ctx.restore();
     plotCurrentMarker(ctx, points[currentIndex].x, points[currentIndex].y, '#7ee3a6');
     document.getElementById('daylength-chart-label').textContent = target.label || 'Selected point';
+
+    const currentHours = getDayLengthSeconds(date, target.lat, target.lng) / 3600;
+    const descEl = document.getElementById('daylength-chart-desc');
+    if (descEl) {
+      descEl.textContent = `Day length curve for ${target.label || 'selected point'} (${formatCoord(target.lat, target.lng)}). Current day length: ${formatDuration(currentHours * 3600)}. Day ${getDayOfYear(date) + 1} of ${dates.length}.`;
+    }
+  }
+
+  // ── Reduced motion support ──────────────────────────────────────────
+  const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+  function prefersReducedMotion() {
+    return reducedMotionQuery.matches;
+  }
+  function panOptions(defaultDuration) {
+    return prefersReducedMotion()
+      ? { animate: false }
+      : { animate: true, duration: defaultDuration };
   }
 
   // ── State-aware update scheduler ────────────────────────────────────
@@ -1191,7 +1222,7 @@
 
   function centerMapOnBrowserLocation(lat, lng) {
     setFollowSun(false);
-    map.setView([lat, lng], WORLD_OVERVIEW_ZOOM, { animate: true, duration: 0.8 });
+    map.setView([lat, lng], WORLD_OVERVIEW_ZOOM, panOptions(0.8));
   }
 
   function requestBrowserLocation(options = {}) {
@@ -1349,6 +1380,7 @@
       const active = tab.getAttribute('data-panel-page') === pageId;
       tab.classList.toggle('active', active);
       tab.setAttribute('aria-selected', active ? 'true' : 'false');
+      tab.setAttribute('tabindex', active ? '0' : '-1');
     });
 
     infoPanel.classList.toggle('details-active', pageId === 'solar-page');
@@ -1359,9 +1391,40 @@
     }
   }
 
-  panelTabs.forEach(tab => {
+  function focusTab(index) {
+    const tab = panelTabs[index];
+    if (tab) {
+      setPanelPage(tab.getAttribute('data-panel-page'));
+      tab.focus();
+    }
+  }
+
+  panelTabs.forEach((tab, index) => {
     tab.addEventListener('click', function () {
       setPanelPage(this.getAttribute('data-panel-page'));
+    });
+
+    tab.addEventListener('keydown', function (e) {
+      switch (e.key) {
+        case 'ArrowRight':
+        case 'ArrowDown':
+          e.preventDefault();
+          focusTab((index + 1) % panelTabs.length);
+          break;
+        case 'ArrowLeft':
+        case 'ArrowUp':
+          e.preventDefault();
+          focusTab((index - 1 + panelTabs.length) % panelTabs.length);
+          break;
+        case 'Home':
+          e.preventDefault();
+          focusTab(0);
+          break;
+        case 'End':
+          e.preventDefault();
+          focusTab(panelTabs.length - 1);
+          break;
+      }
     });
   });
 
@@ -1451,7 +1514,7 @@
     followSunCheckbox.checked = enabled;
     if (followSun) {
       const subsolar = getSubsolarPoint(currentTime());
-      map.panTo([subsolar.lat, subsolar.lng], { animate: true, duration: 0.8 });
+      map.panTo([subsolar.lat, subsolar.lng], panOptions(0.8));
     }
   }
 
@@ -1487,9 +1550,15 @@
     const target = currentTime();
     if (isLive) {
       timeSliderValue.textContent = 'Live';
+      timeSlider.setAttribute('aria-valuetext', 'Live mode');
     } else {
       const utcText = `${formatUtcDate(target)} ${formatTime(target)} UTC`;
-      timeSliderValue.textContent = `${utcText} / ${formatLocalDateTime(target)}`;
+      const localText = formatLocalDateTime(target);
+      timeSliderValue.textContent = `${utcText} / ${localText}`;
+      const offsetDesc = sliderOffsetHours === 0
+        ? 'at anchor time'
+        : `${sliderOffsetHours > 0 ? '+' : ''}${sliderOffsetHours.toFixed(1)} hours from anchor`;
+      timeSlider.setAttribute('aria-valuetext', `${offsetDesc}, ${utcText}`);
     }
   }
 
@@ -1616,7 +1685,7 @@
       const newCenter = L.latLng(subsolar.lat, subsolar.lng);
       const distance = currentCenter.distanceTo(newCenter);
       if (distance > 100000) {
-        map.panTo(newCenter, { animate: true, duration: 1 });
+        map.panTo(newCenter, panOptions(1));
       }
     }
   }

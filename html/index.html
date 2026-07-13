@@ -16,8 +16,8 @@
     <p class="subtitle">Live day and night regions across the planet.</p>
 
     <div class="panel-tabs" role="tablist" aria-label="Daylight views">
-      <button class="panel-tab active" id="map-tab" type="button" role="tab" aria-selected="true" aria-controls="map-page" data-panel-page="map-page">Map</button>
-      <button class="panel-tab" id="solar-tab" type="button" role="tab" aria-selected="false" aria-controls="solar-page" data-panel-page="solar-page">Solar Details</button>
+      <button class="panel-tab active" id="map-tab" type="button" role="tab" aria-selected="true" aria-controls="map-page" data-panel-page="map-page" tabindex="0">Map</button>
+      <button class="panel-tab" id="solar-tab" type="button" role="tab" aria-selected="false" aria-controls="solar-page" data-panel-page="solar-page" tabindex="-1">Solar Details</button>
     </div>
 
     <div class="panel-page active" id="map-page" role="tabpanel" aria-labelledby="map-tab">
@@ -138,8 +138,9 @@
           <h2>Time Travel</h2>
           <button id="live-btn" class="active">Live</button>
         </div>
-        <input type="range" id="time-slider" min="-12" max="12" step="0.1" value="0" />
-        <div class="time-value" id="time-slider-value">Live</div>
+        <label for="time-slider" class="slider-label">Time offset from anchor</label>
+        <input type="range" id="time-slider" min="-12" max="12" step="0.1" value="0" aria-describedby="time-slider-value" />
+        <div class="time-value" id="time-slider-value" aria-live="off">Live</div>
         <div class="presets">
           <button data-preset="mar-equinox">Mar Eq</button>
           <button data-preset="jun-solstice">Jun Sol</button>
@@ -313,7 +314,8 @@
           <h2>Year Curves</h2>
           <span class="section-meta">Declination + distance</span>
         </div>
-        <canvas class="solar-chart" id="solar-year-chart" width="640" height="220"></canvas>
+        <canvas class="solar-chart" id="solar-year-chart" width="640" height="220" role="img" aria-label="Annual declination and Earth-Sun distance curves"></canvas>
+        <p class="sr-only" id="solar-year-chart-desc" aria-live="off"></p>
       </section>
 
       <section class="detail-section chart-section">
@@ -321,7 +323,8 @@
           <h2>Analemma</h2>
           <span class="section-meta" id="analemma-clock-label">--</span>
         </div>
-        <canvas class="solar-chart" id="analemma-chart" width="640" height="260"></canvas>
+        <canvas class="solar-chart" id="analemma-chart" width="640" height="260" role="img" aria-label="Analemma curve showing equation of time versus solar declination"></canvas>
+        <p class="sr-only" id="analemma-chart-desc" aria-live="off"></p>
       </section>
 
       <section class="detail-section chart-section">
@@ -329,7 +332,8 @@
           <h2>Day Length Curve</h2>
           <span class="section-meta" id="daylength-chart-label">--</span>
         </div>
-        <canvas class="solar-chart" id="daylength-chart" width="640" height="220"></canvas>
+        <canvas class="solar-chart" id="daylength-chart" width="640" height="220" role="img" aria-label="Annual day length curve for the selected location"></canvas>
+        <p class="sr-only" id="daylength-chart-desc" aria-live="off"></p>
       </section>
     </div>
   </div>
