@@ -21,6 +21,7 @@
   const initialZoom = parseInt(urlParams.get('zoom'), 10);
   const syncViewInUrl = urlParams.has('lat') || urlParams.has('lon') || urlParams.has('zoom');
   const MAP_VIEW_STORAGE_KEY = 'daylight-map-view';
+  const TIME_FORMAT_STORAGE_KEY = 'daylight-time-format';
   const WORLD_OVERVIEW_ZOOM = 2;
 
   const storedMapView = syncViewInUrl ? null : getStoredMapView();
@@ -35,6 +36,7 @@
     : storedMapView
       ? storedMapView.zoom
       : WORLD_OVERVIEW_ZOOM;
+  let timeFormat = getStoredTimeFormat();
 
   const map = L.map('map', {
     center: mapCenter,
@@ -153,6 +155,24 @@
     try {
       window.localStorage.removeItem(MAP_VIEW_STORAGE_KEY);
     } catch (e) {}
+  }
+
+  function getStoredTimeFormat() {
+    try {
+      return window.localStorage.getItem(TIME_FORMAT_STORAGE_KEY) === '12' ? '12' : '24';
+    } catch (e) {
+      return '24';
+    }
+  }
+
+  function saveTimeFormat(format) {
+    try {
+      window.localStorage.setItem(TIME_FORMAT_STORAGE_KEY, format);
+    } catch (e) {}
+  }
+
+  function is12HourTime() {
+    return timeFormat === '12';
   }
 
   // The daylight/twilight layer is rendered as canvas map tiles instead of
@@ -707,16 +727,27 @@
     return `${Math.abs(lat).toFixed(2)}°${ns}, ${Math.abs(lng).toFixed(2)}°${ew}`;
   }
 
+  function getClockOptions(timeZone, includeSeconds = false) {
+    const options = {
+      hour: is12HourTime() ? 'numeric' : '2-digit',
+      minute: '2-digit',
+      hour12: is12HourTime()
+    };
+    if (includeSeconds) options.second = '2-digit';
+    if (timeZone) options.timeZone = timeZone;
+    return options;
+  }
+
   function formatTime(date) {
     if (!date || isNaN(date.getTime())) return '--:--';
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
+    return date.toLocaleTimeString('en-US', getClockOptions('UTC'));
   }
 
   function formatTimeTz(date, timeZone) {
     if (!date || isNaN(date.getTime())) return '--:--';
     if (!timeZone) return formatTime(date);
     try {
-      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone });
+      return date.toLocaleTimeString('en-US', getClockOptions(timeZone));
     } catch (e) {
       return formatTime(date);
     }
@@ -724,12 +755,16 @@
 
   function formatClockTz(date, timeZone) {
     if (!date || isNaN(date.getTime())) return '--:--:--';
-    if (!timeZone) return date.toISOString().slice(11, 19);
+    if (!timeZone) return date.toLocaleTimeString('en-US', getClockOptions('UTC', true));
     try {
-      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone });
+      return date.toLocaleTimeString('en-US', getClockOptions(timeZone, true));
     } catch (e) {
-      return date.toISOString().slice(11, 19);
+      return date.toLocaleTimeString('en-US', getClockOptions('UTC', true));
     }
+  }
+
+  function formatUtcDate(date) {
+    return date.toISOString().slice(0, 10);
   }
 
   function lookupTimeZone(lat, lng) {
@@ -869,7 +904,7 @@
   }
 
   function formatChartClock(date) {
-    return date.toISOString().slice(11, 16) + ' UTC';
+    return formatTime(date) + ' UTC';
   }
 
   function isValidDate(date) {
@@ -878,6 +913,49 @@
 
   function formatPolarDayLength(isDaylight) {
     return isDaylight ? '24h 0m' : '0h 0m';
+  }
+
+  function getLightStateLabel(date, lat, lng) {
+    const sinAltitude = getSolarSinAltitude(date, lat, lng);
+    if (sinAltitude >= TWILIGHT_THRESHOLDS.daylight) return 'Daylight';
+    if (sinAltitude >= TWILIGHT_THRESHOLDS.civil) return 'Civil twilight';
+    if (sinAltitude >= TWILIGHT_THRESHOLDS.nautical) return 'Nautical twilight';
+    if (sinAltitude >= TWILIGHT_THRESHOLDS.astronomical) return 'Astronomical twilight';
+    return 'Night';
+  }
+
+  function getDaylightWindows(date, lat, lng) {
+    return [-1, 0, 1]
+      .map(dayOffset => SunCalc.getTimes(new Date(date.getTime() + dayOffset * MS_PER_DAY), lat, lng))
+      .filter(times => isValidDate(times.sunrise) && isValidDate(times.sunset) && times.sunset > times.sunrise)
+      .map(times => ({ sunrise: times.sunrise, sunset: times.sunset }))
+      .sort((a, b) => a.sunrise - b.sunrise);
+  }
+
+  function formatDaylightCountdown(seconds) {
+    if (!isFinite(seconds) || seconds < 0) return '--';
+    return seconds < 3600 ? formatCompactDuration(seconds) : formatDuration(seconds);
+  }
+
+  function getDaylightRemainingText(date, lat, lng) {
+    const daylightWindows = getDaylightWindows(date, lat, lng);
+    for (const daylightWindow of daylightWindows) {
+      if (date >= daylightWindow.sunrise && date < daylightWindow.sunset) {
+        return `Ends in ${formatDaylightCountdown((daylightWindow.sunset - date) / 1000)}`;
+      }
+
+      if (date < daylightWindow.sunrise) {
+        return `Starts in ${formatDaylightCountdown((daylightWindow.sunrise - date) / 1000)}`;
+      }
+    }
+
+    const isDaylight = getSolarSinAltitude(date, lat, lng) >= TWILIGHT_THRESHOLDS.daylight;
+    return isDaylight ? 'All day' : 'No daylight';
+  }
+
+  function setLightStats(stateId, remainingId, date, lat, lng) {
+    setStatValue(stateId, getLightStateLabel(date, lat, lng));
+    setStatValue(remainingId, getDaylightRemainingText(date, lat, lng));
   }
 
   function getMoonPhaseName(phase) {
@@ -937,6 +1015,7 @@
     setStatValue('local-sun-azimuth', `${formatDegrees(position.azimuth, 1)} ${getCompassDirection(position.azimuth)}`);
     setStatValue('local-sun-zenith', formatDegrees(position.zenith, 2));
     setStatValue('local-shadow-length', shadowMultiplier ? `${shadowMultiplier >= 99 ? '>99' : shadowMultiplier.toFixed(shadowMultiplier >= 10 ? 0 : 1)}x` : 'No direct Sun');
+    setLightStats('local-light-state', 'local-daylight-remaining', date, target.lat, target.lng);
     setStatValue('local-noon-altitude', formatSignedDegrees(noonAltitude, 2));
     setStatValue('local-detail-daylength', formatDuration(dayLength));
     setStatValue('local-daylength-change', formatSignedDuration((tomorrowLength - yesterdayLength) / 2));
@@ -1230,7 +1309,7 @@
     subsolarMarker.setLatLng([subsolar.lat, subsolar.lng]);
     subsolarLabel.setLatLng([subsolar.lat, subsolar.lng]);
 
-    document.getElementById('utc-time').textContent = date.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+    document.getElementById('utc-time').textContent = `${formatUtcDate(date)} ${formatClockTz(date, 'UTC')} UTC`;
     document.getElementById('sun-position').textContent = formatCoord(subsolar.lat, subsolar.lng);
 
     const greenwich = SunCalc.getTimes(date, 51.4769, -0.0005);
@@ -1268,7 +1347,7 @@
 
     const { lat, lng, label, timeZone } = activeMapPoint;
     const times = SunCalc.getTimes(date, lat, lng);
-    const hasSunTimes = isValidDate(times.sunrise) && isValidDate(times.sunset);
+    const hasSunTimes = isValidDate(times.sunrise) && isValidDate(times.sunset) && times.sunset > times.sunrise;
 
     document.getElementById('location-info').querySelector('h2').textContent = label;
     document.getElementById('hover-coords').textContent = formatCoord(lat, lng);
@@ -1277,6 +1356,7 @@
     if (hasSunTimes) {
       setUtcAndLocalTimeValue('hover-sunrise', times.sunrise, timeZone);
       setUtcAndLocalTimeValue('hover-sunset', times.sunset, timeZone);
+      setLightStats('hover-light-state', 'hover-daylight-remaining', date, lat, lng);
       setStatValue('hover-daylength', formatDuration((times.sunset - times.sunrise) / 1000));
       return;
     }
@@ -1284,6 +1364,7 @@
     const isDaylight = getSolarSinAltitude(date, lat, lng) >= TWILIGHT_THRESHOLDS.daylight;
     setStatValue('hover-sunrise', 'No sunrise');
     setStatValue('hover-sunset', 'No sunset');
+    setLightStats('hover-light-state', 'hover-daylight-remaining', date, lat, lng);
     setStatValue('hover-daylength', formatPolarDayLength(isDaylight));
   }
 
@@ -1344,6 +1425,8 @@
   function resetBrowserLocalSunReadout() {
     document.getElementById('browser-sunrise').textContent = '--';
     document.getElementById('browser-sunset').textContent = '--';
+    document.getElementById('browser-light-state').textContent = '--';
+    document.getElementById('browser-daylight-remaining').textContent = '--';
     document.getElementById('browser-daylength').textContent = '--';
   }
 
@@ -1354,12 +1437,13 @@
     }
 
     const times = SunCalc.getTimes(date, browserLocation.lat, browserLocation.lng);
-    const hasSunTimes = isValidDate(times.sunrise) && isValidDate(times.sunset);
+    const hasSunTimes = isValidDate(times.sunrise) && isValidDate(times.sunset) && times.sunset > times.sunrise;
     const tzSuffix = browserLocation.timeZone ? ' ' + getTimeZoneAbbr(browserLocation.timeZone, date) : ' UTC';
 
     if (hasSunTimes) {
       document.getElementById('browser-sunrise').textContent = formatTimeTz(times.sunrise, browserLocation.timeZone) + tzSuffix;
       document.getElementById('browser-sunset').textContent = formatTimeTz(times.sunset, browserLocation.timeZone) + tzSuffix;
+      setLightStats('browser-light-state', 'browser-daylight-remaining', date, browserLocation.lat, browserLocation.lng);
       document.getElementById('browser-daylength').textContent = formatDuration((times.sunset - times.sunrise) / 1000);
       return;
     }
@@ -1367,6 +1451,7 @@
     const isDaylight = getSolarSinAltitude(date, browserLocation.lat, browserLocation.lng) >= TWILIGHT_THRESHOLDS.daylight;
     document.getElementById('browser-sunrise').textContent = 'No sunrise';
     document.getElementById('browser-sunset').textContent = 'No sunset';
+    setLightStats('browser-light-state', 'browser-daylight-remaining', date, browserLocation.lat, browserLocation.lng);
     document.getElementById('browser-daylength').textContent = formatPolarDayLength(isDaylight);
   }
 
@@ -1538,6 +1623,7 @@
   const presetBtns = document.querySelectorAll('[data-preset]');
   const infoPanel = document.getElementById('info-panel');
   const panelTabs = document.querySelectorAll('[data-panel-page]');
+  const timeFormatBtns = document.querySelectorAll('[data-time-format]');
 
   const presets = {
     'mar-equinox': { year: 2026, month: 2, day: 20 },
@@ -1584,6 +1670,30 @@
     });
   });
 
+  function updateTimeFormatButtons() {
+    timeFormatBtns.forEach(btn => {
+      const active = btn.getAttribute('data-time-format') === timeFormat;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+
+  function setTimeFormat(format) {
+    if (format !== '12' && format !== '24') return;
+    timeFormat = format;
+    saveTimeFormat(format);
+    updateTimeFormatButtons();
+    lastChartSignature = '';
+    update(currentTime());
+    updateSliderLabel();
+  }
+
+  timeFormatBtns.forEach(btn => {
+    btn.addEventListener('click', function () {
+      setTimeFormat(this.getAttribute('data-time-format'));
+    });
+  });
+
   window.addEventListener('resize', function () {
     lastChartSignature = '';
     updateSolarDetails(currentTime());
@@ -1622,9 +1732,9 @@
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
-      hour: '2-digit',
+      hour: is12HourTime() ? 'numeric' : '2-digit',
       minute: '2-digit',
-      hour12: false
+      hour12: is12HourTime()
     };
 
     try {
@@ -1688,7 +1798,7 @@
     if (isLive) {
       timeSliderValue.textContent = 'Live';
     } else {
-      const utcText = target.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+      const utcText = `${formatUtcDate(target)} ${formatTime(target)} UTC`;
       timeSliderValue.textContent = `${utcText} / ${formatLocalDateTime(target)}`;
     }
   }
@@ -1799,6 +1909,7 @@
     }
   }
 
+  updateTimeFormatButtons();
   update(currentTime());
   subsolarLabel.addTo(map);
   timeSlider.value = 0;

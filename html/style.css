@@ -385,6 +385,51 @@ html, body {
   cursor: pointer;
 }
 
+.control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+  color: #c6cbda;
+  font-size: 0.85rem;
+}
+
+.segmented-control {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(44px, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.segmented-control button {
+  min-height: 26px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: #9ba4ba;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.segmented-control button:hover,
+.segmented-control button:focus-visible {
+  color: #f0f3fa;
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.segmented-control button.active {
+  color: #101525;
+  background: #ffd85c;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
 .time-controls {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);

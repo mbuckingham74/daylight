@@ -63,6 +63,14 @@
             <span class="stat-value" id="browser-sunset">--</span>
           </div>
           <div class="stat">
+            <span class="stat-label">Light Now</span>
+            <span class="stat-value" id="browser-light-state">--</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Daylight Remaining</span>
+            <span class="stat-value" id="browser-daylight-remaining">--</span>
+          </div>
+          <div class="stat">
             <span class="stat-label">Day Length</span>
             <span class="stat-value" id="browser-daylength">--</span>
           </div>
@@ -90,6 +98,14 @@
           <span class="stat-value" id="hover-sunset">--</span>
         </div>
         <div class="stat">
+          <span class="stat-label">Light Now</span>
+          <span class="stat-value" id="hover-light-state">--</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Daylight Remaining</span>
+          <span class="stat-value" id="hover-daylight-remaining">--</span>
+        </div>
+        <div class="stat">
           <span class="stat-label">Day Length</span>
           <span class="stat-value" id="hover-daylength">--</span>
         </div>
@@ -108,6 +124,13 @@
           <input type="checkbox" id="show-cities" checked />
           Major cities
         </label>
+        <div class="control-row">
+          <span>Time format</span>
+          <div class="segmented-control" role="group" aria-label="Time format">
+            <button type="button" data-time-format="12" aria-pressed="false">12h</button>
+            <button type="button" data-time-format="24" aria-pressed="true">24h</button>
+          </div>
+        </div>
       </div>
 
       <div class="time-controls">
@@ -218,6 +241,14 @@
           <div class="detail-stat">
             <span class="stat-label">Shadow Length</span>
             <span class="stat-value" id="local-shadow-length">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Light Now</span>
+            <span class="stat-value" id="local-light-state">--</span>
+          </div>
+          <div class="detail-stat">
+            <span class="stat-label">Daylight Remaining</span>
+            <span class="stat-value" id="local-daylight-remaining">--</span>
           </div>
           <div class="detail-stat">
             <span class="stat-label">Solar Noon Alt.</span>
