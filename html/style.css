@@ -355,23 +355,68 @@ html, body {
 }
 
 #my-location-btn {
-  background: rgba(91, 140, 255, 0.15);
-  border: 1px solid rgba(91, 140, 255, 0.4);
-  color: #5b8cff;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 0.7rem;
-  font-weight: 600;
+  width: 100%;
+  min-height: 36px;
+  background: #5b8cff;
+  border: 1px solid #78a0ff;
+  color: #ffffff;
+  padding: 7px 12px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
-  flex-shrink: 0;
+}
+
+.browser-timezone-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: #9ba4ba;
+  font-size: 0.72rem;
+}
+
+.browser-timezone-summary strong {
+  max-width: 170px;
+  color: #f0f3fa;
+  font-size: 0.76rem;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.browser-location-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.browser-location-intro p {
+  margin: 0;
+  color: #c6cbda;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.browser-location-intro small {
+  color: #7f889d;
+  font-size: 0.66rem;
+  line-height: 1.35;
 }
 
 .browser-location {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.browser-location[hidden] {
+  display: none;
 }
 
 .browser-location .stat {
@@ -386,7 +431,8 @@ html, body {
 }
 
 #my-location-btn:hover:not(:disabled) {
-  background: rgba(91, 140, 255, 0.28);
+  background: #709bff;
+  border-color: #91afff;
 }
 
 #my-location-btn:disabled {
@@ -399,6 +445,33 @@ html, body {
   flex-direction: column;
   gap: 10px;
   margin-bottom: 18px;
+}
+
+.map-view-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.map-view-actions button {
+  min-height: 32px;
+  border: 1px solid rgba(91, 140, 255, 0.4);
+  border-radius: 8px;
+  background: rgba(91, 140, 255, 0.13);
+  color: #b9cbff;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.map-view-actions button:hover,
+.map-view-actions button:focus-visible {
+  background: rgba(91, 140, 255, 0.26);
+  border-color: rgba(120, 160, 255, 0.7);
+  color: #ffffff;
+  outline: none;
 }
 
 .controls label {

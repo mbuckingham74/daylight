@@ -6,7 +6,7 @@
   <title>Daylight Map - Live Day/Night Tracker</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <link rel="stylesheet" href="style.css?v=20260710a" />
+  <link rel="stylesheet" href="style.css?v=20260713b" />
 </head>
 <body>
   <div id="map"></div>
@@ -46,14 +46,18 @@
           <h2>Browser Location</h2>
           <div class="location-actions">
             <button id="share-btn" type="button" title="Copy or share a link to the current view">Share</button>
-            <button id="my-location-btn" type="button" title="Request your browser location to center the map and show local sunrise/sunset. Your coordinates are not shared or stored.">Use My Location</button>
           </div>
         </div>
-        <div class="browser-location" aria-live="polite">
-          <div class="stat">
-            <span class="stat-label">Timezone</span>
-            <span class="stat-value" id="browser-timezone">--</span>
-          </div>
+        <div class="browser-timezone-summary">
+          <span>Browser timezone</span>
+          <strong id="browser-timezone">--</strong>
+        </div>
+        <div class="browser-location-intro">
+          <p id="browser-location-status" aria-live="polite">See sunrise, sunset, and daylight for your current location.</p>
+          <button id="my-location-btn" type="button" aria-describedby="browser-location-privacy browser-location-status" aria-controls="browser-location-details" aria-expanded="false">Use My Location</button>
+          <small id="browser-location-privacy">Requested only when you choose. Coordinates stay in this session unless you share the current view.</small>
+        </div>
+        <div class="browser-location" id="browser-location-details" aria-live="polite" hidden>
           <div class="stat">
             <span class="stat-label">Nearest City</span>
             <span class="stat-value" id="browser-nearest-city">--</span>
@@ -127,6 +131,10 @@
       </details>
 
       <div class="controls">
+        <div class="map-view-actions" role="group" aria-label="Map view">
+          <button id="center-sun-btn" type="button">Center Sun</button>
+          <button id="reset-view-btn" type="button">Reset View</button>
+        </div>
         <label>
           <input type="checkbox" id="follow-sun" />
           Follow Sun
@@ -362,6 +370,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js" integrity="sha384-Ssj6wXFm/aTdsC1FeDLrGxP3/PooxBGcOqehkmt8CbKQOcei4CDaRbreAUvdFNrq" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/tz-lookup@6.1.25/tz.js" integrity="sha384-hu4xDymJTssX8+i8qDUKexc5lIusgVeLPv72brg57d+WMdeCGtr3A1U8oW8PEtaP" crossorigin="anonymous"></script>
   <script src="solar.js?v=20260713a"></script>
-  <script src="app.js?v=20260713a"></script>
+  <script src="view.js?v=20260713b"></script>
+  <script src="app.js?v=20260713b"></script>
 </body>
 </html>

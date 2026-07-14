@@ -17,7 +17,7 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
   - Night core (sun below −18°)
 - **Sun marker** showing where the Sun is directly overhead
 - **Twilight legend** — a collapsible legend explaining each color band (daylight, civil, nautical, astronomical, night) and the −0.833° refraction convention used for sunrise/sunset
-- **Loading/failure states** — if a required dependency (Leaflet, SunCalc, solar.js) fails to load from its CDN, a non-blocking error banner appears with a reload button instead of a blank page
+- **Loading/failure states** — if a required dependency (Leaflet, SunCalc, solar.js, or view.js) fails to load, a non-blocking error banner appears with a reload button instead of a blank page
 - **Muted dark terrain-style base map** (Esri World Dark Gray Base + Boundaries & Places overlay) so the terminator stays the star
 
 ### Info panel
@@ -39,7 +39,9 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
   - Mini charts for annual declination/distance, the current-time analemma, and selected-location day length
 
 ### Controls
-- **Follow Sun** — auto-pans the map to keep the Sun marker centered. Auto-disables on manual pan/zoom, on city click, and on "Use My Location". Defaults *off* so user and shared views are not panned away to the Sun marker.
+- **Center Sun** — a one-shot camera action that puts the Sun marker in the center of the map area not covered by the desktop panel or mobile bottom sheet
+- **Reset View** — returns to the deterministic world overview and removes shared camera parameters from the address bar
+- **Follow Sun** — auto-pans the map to keep the Sun marker centered in the unobstructed map area. Auto-disables on manual pan/zoom, on city click, and on "Use My Location". Defaults *off* so user and shared views are not panned away to the Sun marker.
 - **Show twilight** — toggle the twilight/night overlay on/off
 - **Major cities** — toggle 15 major world city markers and labels. **Markers are clickable** — clicking a city recenters the map and shows that city's sunrise/sunset in the city's own timezone.
 
@@ -64,7 +66,7 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 - **Map point card** — hover/click sunrise and sunset are separate from the browser-location card, so polar hover data cannot be confused with the viewer's local daylight.
 
 ### Permalink state
-Refresh starts from the last local map center and zoom while live mode keeps running. Open the title to clear the saved local view and return to the clean root URL. Exact shared views can still be opened with `?time=&lat=&lon=&zoom=` and are not overridden by geolocation. See [Permalink Format](#permalink-format) below.
+The clean root route always starts from the same world overview; ordinary panning and browser geolocation coordinates are session-only and are not stored. Exact shared views can still be opened with `?time=&lat=&lon=&zoom=`. See [Permalink Format](#permalink-format) below.
 
 ## Tech Stack
 
@@ -214,11 +216,11 @@ https://daylight.forkstech.com/?time=2026-12-22T02:56:24.000Z&lat=47.6000&lon=-1
 | `lon`  | Map center longitude (east-positive). `0` is honored (not treated as missing). |
 | `zoom` | Leaflet zoom level (2–12). |
 
-The **Follow Sun** control starts *off* so shared and first-load views are preserved instead of being immediately panned away to the Sun marker. Normal browsing keeps the address bar clean; map coordinates stay in the URL only when the page was opened as an explicit map view.
+The **Follow Sun** control starts *off* so shared and first-load views are preserved instead of being immediately panned away to the Sun marker. Normal browsing keeps the address bar clean; map coordinates stay in the URL only when the page was opened as an explicit map view. **Reset View** returns to the canonical root camera and removes those view parameters.
 
 ## Known Limitations
 
-- **Sun marker** is placed at the exact computed longitude; with `worldCopyJump: true` it may occasionally appear at the antimeridian edge during wrapping. The displayed coordinate is always in `[−180, 180]`.
+- **Sun marker** uses the nearest wrapped world copy to stay visually continuous across the antimeridian. The displayed coordinate remains normalized to `[−180, 180]`.
 - **Geolocation requires HTTPS and user permission.** On `http://` (e.g. local dev without TLS) or if the user denies the prompt, the button reports the error inline.
 
 ## License

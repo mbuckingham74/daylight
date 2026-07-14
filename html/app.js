@@ -7,6 +7,7 @@
   // always be available.
   const missingDeps = [];
   if (!window.SolarMath) missingDeps.push('Solar math module');
+  if (!window.DaylightView) missingDeps.push('Map view module');
   if (!window.L) missingDeps.push('Leaflet (map library)');
   if (!window.SunCalc) missingDeps.push('SunCalc (sunrise/sunset times)');
 
@@ -20,9 +21,10 @@
   }
 
   const SM = window.SolarMath;
+  const View = window.DaylightView;
   const {
     D2R, MS_PER_DAY, TWILIGHT_THRESHOLDS,
-    normalizeDegrees, wrapLng, clamp, clampZoom,
+    normalizeDegrees, wrapLng, clamp,
     isValidDate, getSunEquatorial, getSubsolarPoint, getSunRenderState,
     getSolarSinAltitude, getEarthSunDistanceAu, getSolarOrbitStats,
     getEquationOfTimeMinutes, getSolarPosition, getGlobalLightFractions,
@@ -32,24 +34,23 @@
 
   // Parse and validate permalink params on load. Invalid fields are ignored
   // individually so a single bad value doesn't break the whole page.
-  const MAP_VIEW_STORAGE_KEY = 'daylight-map-view';
+  const LEGACY_MAP_VIEW_STORAGE_KEY = 'daylight-map-view';
   const TIME_FORMAT_STORAGE_KEY = 'daylight-time-format';
   const WORLD_OVERVIEW_ZOOM = 2;
+  const DEFAULT_MAP_CENTER = [20, 0];
+  clearLegacyMapView();
 
-  const { time: initialTime, lat: initialLat, lng: initialLng, zoom: initialZoom, hasView: syncViewInUrl, invalid: invalidUrlParams } = SM.parsePermalinkParams(window.location.search);
+  const parsedPermalink = SM.parsePermalinkParams(window.location.search);
+  const { time: initialTime, lat: initialLat, lng: initialLng, zoom: initialZoom, invalid: invalidUrlParams } = parsedPermalink;
+  let syncViewInUrl = parsedPermalink.hasView;
 
-  const storedMapView = syncViewInUrl ? null : getStoredMapView();
   const hasInitialCenter = !isNaN(initialLat) && !isNaN(initialLng);
   const mapCenter = hasInitialCenter
     ? [initialLat, initialLng]
-    : storedMapView
-      ? [storedMapView.lat, storedMapView.lng]
-      : [20, 0];
+    : DEFAULT_MAP_CENTER;
   const mapZoom = !isNaN(initialZoom)
     ? initialZoom
-    : storedMapView
-      ? storedMapView.zoom
-      : WORLD_OVERVIEW_ZOOM;
+    : WORLD_OVERVIEW_ZOOM;
   let timeFormat = getStoredTimeFormat();
 
   const map = L.map('map', {
@@ -78,39 +79,9 @@
     noWrap: false
   }).addTo(map);
 
-  function getStoredMapView() {
+  function clearLegacyMapView() {
     try {
-      const raw = window.localStorage.getItem(MAP_VIEW_STORAGE_KEY);
-      if (!raw) return null;
-
-      const view = JSON.parse(raw);
-      const lat = parseFloat(view.lat);
-      const lng = parseFloat(view.lng);
-      const zoom = clampZoom(parseInt(view.zoom, 10));
-
-      if (!isFinite(lat) || !isFinite(lng) || !isFinite(zoom)) return null;
-      if (lat < -85 || lat > 85) return null;
-
-      return { lat, lng: wrapLng(lng), zoom };
-    } catch (e) {
-      return null;
-    }
-  }
-
-  function saveMapView() {
-    try {
-      const center = map.getCenter();
-      window.localStorage.setItem(MAP_VIEW_STORAGE_KEY, JSON.stringify({
-        lat: Number(center.lat.toFixed(4)),
-        lng: Number(wrapLng(center.lng).toFixed(4)),
-        zoom: map.getZoom()
-      }));
-    } catch (e) {}
-  }
-
-  function clearStoredMapView() {
-    try {
-      window.localStorage.removeItem(MAP_VIEW_STORAGE_KEY);
+      window.localStorage.removeItem(LEGACY_MAP_VIEW_STORAGE_KEY);
     } catch (e) {}
   }
 
@@ -277,6 +248,59 @@
   })
     .setContent('Sun')
     .setLatLng([0, 0]);
+
+  function getPanelBoundsInMap() {
+    const panel = document.getElementById('info-panel');
+    if (!panel) return null;
+
+    const mapRect = map.getContainer().getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    return {
+      left: panelRect.left - mapRect.left,
+      top: panelRect.top - mapRect.top,
+      right: panelRect.right - mapRect.left,
+      bottom: panelRect.bottom - mapRect.top,
+      width: panelRect.width,
+      height: panelRect.height
+    };
+  }
+
+  function getMapSafeAreaCenter() {
+    const size = map.getSize();
+    const point = View.getSafeAreaCenter(
+      { x: size.x, y: size.y },
+      getPanelBoundsInMap()
+    );
+    return L.point(point.x, point.y);
+  }
+
+  function getTargetCenterForMapPoint(latlng, zoom = map.getZoom()) {
+    const size = map.getSize();
+    const safePoint = getMapSafeAreaCenter();
+    const offset = View.getMapCenterOffset(
+      { x: size.x, y: size.y },
+      { x: safePoint.x, y: safePoint.y }
+    );
+    const displayLng = View.getNearestWorldLongitude(latlng.lng, map.getCenter().lng);
+    const projectedPoint = map.project(L.latLng(latlng.lat, displayLng), zoom);
+    return map.unproject(projectedPoint.add(L.point(offset.x, offset.y)), zoom);
+  }
+
+  function panMapPointToSafeCenter(latlng, duration = 0.8) {
+    map.panTo(getTargetCenterForMapPoint(latlng), panOptions(duration));
+  }
+
+  function updateSunLabelPlacement() {
+    const point = map.latLngToContainerPoint(subsolarMarker.getLatLng());
+    const size = map.getSize();
+    const placement = View.getEdgeAwareLabelPlacement(
+      { x: point.x, y: point.y },
+      { x: size.x, y: size.y }
+    );
+    subsolarLabel.options.direction = placement.direction;
+    subsolarLabel.options.offset = L.point(placement.offset[0], placement.offset[1]);
+    subsolarLabel.update();
+  }
 
   const cities = [
     { name: 'London', lat: 51.5074, lng: -0.1278, tz: 'Europe/London' },
@@ -1017,8 +1041,10 @@
 
   function updateClock(date) {
     const subsolar = getSubsolarPoint(date);
-    subsolarMarker.setLatLng([subsolar.lat, subsolar.lng]);
-    subsolarLabel.setLatLng([subsolar.lat, subsolar.lng]);
+    const displayLng = View.getNearestWorldLongitude(subsolar.lng, map.getCenter().lng);
+    subsolarMarker.setLatLng([subsolar.lat, displayLng]);
+    subsolarLabel.setLatLng([subsolar.lat, displayLng]);
+    updateSunLabelPlacement();
     document.getElementById('utc-time').textContent = `${formatUtcDate(date)} ${formatClockTz(date, 'UTC')} UTC`;
     document.getElementById('sun-position').textContent = formatCoord(subsolar.lat, subsolar.lng);
   }
@@ -1188,11 +1214,29 @@
     document.getElementById('browser-daylength').textContent = formatPolarDayLength(isDaylight);
   }
 
-  function setBrowserNearestCityStatus(status) {
-    document.getElementById('browser-nearest-city').textContent = status;
+  function setBrowserLocationStatus(status) {
+    document.getElementById('browser-location-status').textContent = status;
+  }
+
+  function setBrowserLocationDetailsVisible(visible) {
+    const details = document.getElementById('browser-location-details');
+    const card = document.getElementById('browser-location-info');
+    const button = document.getElementById('my-location-btn');
+    details.hidden = !visible;
+    card.classList.toggle('has-location', visible);
+    button.setAttribute('aria-expanded', visible ? 'true' : 'false');
+  }
+
+  function clearBrowserLocationReadout() {
     browserLocation = null;
+    document.getElementById('browser-nearest-city').textContent = '--';
     clearBrowserLocationMarker();
     resetBrowserLocalSunReadout();
+    setBrowserLocationDetailsVisible(false);
+  }
+
+  function getLocationButtonLabel() {
+    return browserLocation ? 'Update My Location' : 'Use My Location';
   }
 
   function clearBrowserLocationMarker() {
@@ -1202,7 +1246,8 @@
   }
 
   function updateBrowserLocationMarker(lat, lng, label) {
-    const latlng = [lat, lng];
+    const displayLng = View.getNearestWorldLongitude(lng, map.getCenter().lng);
+    const latlng = [lat, displayLng];
 
     if (!browserLocationMarker) {
       browserLocationMarker = L.circleMarker(latlng, {
@@ -1240,7 +1285,12 @@
 
   function centerMapOnBrowserLocation(lat, lng) {
     setFollowSun(false);
-    map.setView([lat, lng], WORLD_OVERVIEW_ZOOM, panOptions(0.8));
+    const location = L.latLng(lat, lng);
+    map.setView(
+      getTargetCenterForMapPoint(location, WORLD_OVERVIEW_ZOOM),
+      WORLD_OVERVIEW_ZOOM,
+      panOptions(0.8)
+    );
   }
 
   function requestBrowserLocation(options = {}) {
@@ -1248,15 +1298,16 @@
     const myLocationBtn = document.getElementById('my-location-btn');
 
     if (!navigator.geolocation) {
-      setBrowserNearestCityStatus('Unavailable');
+      clearBrowserLocationReadout();
+      setBrowserLocationStatus('Geolocation is not supported by this browser.');
       if (updateButton) {
+        myLocationBtn.disabled = true;
         myLocationBtn.textContent = 'Unsupported';
-        setTimeout(() => { myLocationBtn.textContent = 'Use My Location'; }, 2000);
       }
       return;
     }
 
-    setBrowserNearestCityStatus('Locating...');
+    setBrowserLocationStatus('Requesting your current location...');
 
     if (updateButton) {
       myLocationBtn.disabled = true;
@@ -1277,10 +1328,12 @@
         };
         updateBrowserLocationMarker(lat, lng, browserLocation.label);
         updateBrowserLocalSunReadout();
+        setBrowserLocationDetailsVisible(true);
+        setBrowserLocationStatus(`Using your browser-reported location near ${browserLocation.label}.`);
 
         if (updateButton) {
           myLocationBtn.disabled = false;
-          myLocationBtn.textContent = 'Use My Location';
+          myLocationBtn.textContent = getLocationButtonLabel();
         }
 
         if (centerOnLocation) {
@@ -1298,12 +1351,13 @@
           3: 'Request timed out'
         };
         const message = messages[err.code] || 'Location error';
-        setBrowserNearestCityStatus(message);
+        clearBrowserLocationReadout();
+        setBrowserLocationStatus(`${message}. You can update the site's location permission and try again.`);
 
         if (updateButton) {
           myLocationBtn.disabled = false;
           myLocationBtn.textContent = message;
-          setTimeout(() => { myLocationBtn.textContent = 'Use My Location'; }, 2500);
+          setTimeout(() => { myLocationBtn.textContent = getLocationButtonLabel(); }, 2500);
         }
       },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
@@ -1311,15 +1365,16 @@
   }
 
   function initializeBrowserLocationReadout() {
-    // Show the browser timezone immediately — this does not require permission.
     updateBrowserTimezoneReadout();
+    clearBrowserLocationReadout();
 
-    // Show a prompt instead of automatically requesting coordinates.
-    // The user must click "Use My Location" to consent to geolocation.
     if (!navigator.geolocation) {
-      setBrowserNearestCityStatus('Geolocation unsupported');
+      setBrowserLocationStatus('Geolocation is not supported by this browser.');
+      const button = document.getElementById('my-location-btn');
+      button.disabled = true;
+      button.textContent = 'Unsupported';
     } else {
-      setBrowserNearestCityStatus('Click "Use My Location"');
+      setBrowserLocationStatus('See sunrise, sunset, and daylight for your current location.');
     }
   }
 
@@ -1340,15 +1395,15 @@
 
   // "Use My Location" — browser geolocation. Times display in the browser's
   // local timezone, which is correct because the user is physically there.
-  const homeLink = document.getElementById('home-link');
   const myLocationBtn = document.getElementById('my-location-btn');
-  homeLink.addEventListener('click', clearStoredMapView);
   initializeBrowserLocationReadout();
   myLocationBtn.addEventListener('click', function () {
     requestBrowserLocation({ centerOnLocation: true, showTimes: true, updateButton: true });
   });
 
   // UI controls
+  const centerSunBtn = document.getElementById('center-sun-btn');
+  const resetViewBtn = document.getElementById('reset-view-btn');
   const followSunCheckbox = document.getElementById('follow-sun');
   const showTerminatorCheckbox = document.getElementById('show-terminator');
   const showCitiesCheckbox = document.getElementById('show-cities');
@@ -1372,6 +1427,9 @@
   function applyPanelState() {
     panelStates.forEach(s => infoPanel.classList.remove(s));
     infoPanel.classList.add(panelStates[panelStateIndex]);
+    if (followSun) {
+      setTimeout(() => centerMapOnSun(0.3), 320);
+    }
   }
 
   panelHandle.addEventListener('click', function () {
@@ -1494,6 +1552,8 @@
   window.addEventListener('resize', function () {
     lastChartSignature = '';
     updateSolarDetails(currentTime());
+    updateSunLabelPlacement();
+    if (followSun) centerMapOnSun(0.3);
   });
 
   function findPresetKeyForDate(date) {
@@ -1546,14 +1606,31 @@
     });
   }
 
-  // The Sun marker and label are always on the map — the "Follow Sun"
-  // toggle only controls auto-panning, not visibility.
+  function centerMapOnSun(duration = 0.8) {
+    const subsolar = getSubsolarPoint(currentTime());
+    panMapPointToSafeCenter(L.latLng(subsolar.lat, subsolar.lng), duration);
+  }
+
+  function resetMapView() {
+    syncViewInUrl = false;
+    setFollowSun(false);
+    map.setView(DEFAULT_MAP_CENTER, WORLD_OVERVIEW_ZOOM, panOptions(0.8));
+    updatePermalink();
+  }
+
+  centerSunBtn.addEventListener('click', function () {
+    centerMapOnSun();
+  });
+
+  resetViewBtn.addEventListener('click', resetMapView);
+
+  // The Sun marker and label are always on the map. "Center Sun" is a
+  // one-shot camera action; "Follow Sun" keeps it in the unobstructed area.
   function setFollowSun(enabled) {
     followSun = enabled;
     followSunCheckbox.checked = enabled;
     if (followSun) {
-      const subsolar = getSubsolarPoint(currentTime());
-      map.panTo([subsolar.lat, subsolar.lng], panOptions(0.8));
+      centerMapOnSun();
     }
   }
 
@@ -1599,12 +1676,6 @@
         : `${sliderOffsetHours > 0 ? '+' : ''}${sliderOffsetHours.toFixed(1)} hours from anchor`;
       timeSlider.setAttribute('aria-valuetext', `${offsetDesc}, ${utcText}`);
     }
-  }
-
-  function resetSliderToCenter() {
-    sliderOffsetHours = 0;
-    timeSlider.value = 0;
-    updateSliderLabel();
   }
 
   // ── Datetime-local picker ───────────────────────────────────────────
@@ -1704,11 +1775,10 @@
     });
   });
 
-  // Permalink: keep the root URL clean unless the page was opened as an
-  // explicit map view. Time travel still gets a shareable timestamp.
+  // Keep the root route deterministic. Only explicit shared map views keep
+  // their camera state in the URL; ordinary browsing is session-only.
   let permalinkDebounce;
   function updatePermalink() {
-    saveMapView();
     clearTimeout(permalinkDebounce);
     permalinkDebounce = setTimeout(() => {
       const params = new URLSearchParams();
@@ -1732,6 +1802,7 @@
 
   map.on('moveend', updatePermalink);
   map.on('zoomend', updatePermalink);
+  map.on('move zoom resize', updateSunLabelPlacement);
 
   // ── Share / Copy Link ───────────────────────────────────────────────
   // Generate a canonical share URL that always includes the current time,
@@ -1839,10 +1910,11 @@
     if (followSun) {
       const subsolar = getSubsolarPoint(now);
       const currentCenter = map.getCenter();
-      const newCenter = L.latLng(subsolar.lat, subsolar.lng);
-      const distance = currentCenter.distanceTo(newCenter);
+      const sunPoint = L.latLng(subsolar.lat, subsolar.lng);
+      const targetCenter = getTargetCenterForMapPoint(sunPoint);
+      const distance = currentCenter.distanceTo(targetCenter);
       if (distance > 100000) {
-        map.panTo(newCenter, panOptions(1));
+        map.panTo(targetCenter, panOptions(1));
       }
     }
   }
