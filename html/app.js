@@ -1187,6 +1187,7 @@
     document.getElementById('browser-light-state').textContent = '--';
     document.getElementById('browser-daylight-remaining').textContent = '--';
     document.getElementById('browser-daylength').textContent = '--';
+    document.getElementById('browser-daylength-change').textContent = '--';
   }
 
   function updateBrowserLocalSunReadout(date = currentTime()) {
@@ -1198,6 +1199,10 @@
     const times = SunCalc.getTimes(date, browserLocation.lat, browserLocation.lng);
     const hasSunTimes = isValidDate(times.sunrise) && isValidDate(times.sunset) && times.sunset > times.sunrise;
     const tzSuffix = browserLocation.timeZone ? ' ' + getTimeZoneAbbr(browserLocation.timeZone, date) : ' UTC';
+
+    const yesterdayLen = getDayLengthSeconds(new Date(date.getTime() - MS_PER_DAY), browserLocation.lat, browserLocation.lng);
+    const tomorrowLen = getDayLengthSeconds(new Date(date.getTime() + MS_PER_DAY), browserLocation.lat, browserLocation.lng);
+    document.getElementById('browser-daylength-change').textContent = formatSignedDuration((tomorrowLen - yesterdayLen) / 2);
 
     if (hasSunTimes) {
       document.getElementById('browser-sunrise').textContent = formatTimeTz(times.sunrise, browserLocation.timeZone) + tzSuffix;
