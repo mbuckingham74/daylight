@@ -410,6 +410,19 @@ describe('getTwilightPixel', () => {
     assert.ok(pixel.alpha > 0);
   });
 
+  test('civil twilight begins with a distinct darkening at sunset', () => {
+    const pixel = SM.getTwilightPixel(SM.TWILIGHT_THRESHOLDS.daylight - 1e-9);
+    assert.ok(pixel);
+    assert.equal(pixel.alpha, 58);
+    assert.deepEqual(pixel.color, SM.CIVIL_TWILIGHT_COLOR);
+  });
+
+  test('civil and nautical twilight meet at the same base opacity', () => {
+    const civilEnd = SM.getTwilightPixel(SM.TWILIGHT_THRESHOLDS.civil);
+    const nauticalStart = SM.getTwilightPixel(SM.TWILIGHT_THRESHOLDS.civil - 1e-9);
+    assert.equal(civilEnd.alpha, nauticalStart.alpha);
+  });
+
   test('returns non-null for night', () => {
     const pixel = SM.getTwilightPixel(-1);
     assert.ok(pixel);

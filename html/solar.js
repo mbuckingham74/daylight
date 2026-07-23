@@ -358,7 +358,10 @@
 
     if (sinAltitude >= TWILIGHT_THRESHOLDS.civil) {
       const amount = smoothstep(TWILIGHT_THRESHOLDS.daylight, TWILIGHT_THRESHOLDS.civil, sinAltitude);
-      const pixel = { color: CIVIL_TWILIGHT_COLOR, alpha: Math.round(42 + 30 * amount) };
+      // Make sunset/sunrise an unmistakable visual boundary: civil twilight
+      // begins at a clearly visible opacity, then meets nautical twilight
+      // without an opacity jump at -6°.
+      const pixel = { color: CIVIL_TWILIGHT_COLOR, alpha: Math.round(58 + 30 * amount) };
       return accentTwilightBoundary(pixel, sinAltitude);
     }
 
