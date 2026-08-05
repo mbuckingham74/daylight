@@ -69,6 +69,31 @@ html, body {
   width: 460px;
 }
 
+.globe-link {
+  display: block;
+  width: 100%;
+  margin-bottom: 14px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 216, 92, 0.5);
+  border-radius: 9px;
+  background: rgba(255, 216, 92, 0.14);
+  color: #ffe08a;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.globe-link:hover,
+.globe-link:focus-visible {
+  background: rgba(255, 216, 92, 0.28);
+  border-color: rgba(255, 216, 92, 0.85);
+  color: #fff6dd;
+  outline: none;
+}
+
 .panel-tabs {
   display: grid;
   grid-template-columns: 1fr 1.35fr;

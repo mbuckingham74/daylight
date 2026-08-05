@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daylight Globe - Live 3D Day/Night Tracker</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="globe.css?v=20260804a" />
+</head>
+<body>
+  <div id="globe-scene" aria-label="Interactive 3D Earth globe showing live sunlight and darkness"></div>
+  <canvas id="globe-canvas" tabindex="0" aria-label="3D Earth globe. Drag to orbit, scroll to zoom."></canvas>
+
+  <aside class="panel" id="globe-panel" aria-label="Daylight Globe controls">
+    <div class="panel-handle" id="panel-handle" aria-hidden="true"><span></span></div>
+    <div class="panel-header">
+      <h1><a href="/" id="home-link" aria-label="Open Daylight Map home">Daylight Globe</a></h1>
+      <span class="live-badge" id="live-badge" role="status"><span class="live-dot" aria-hidden="true"></span><span id="live-status">Live</span></span>
+    </div>
+    <p class="subtitle">Live sunlight, twilight, and night across the planet.</p>
+
+    <div class="stats">
+      <div class="stat">
+        <span class="stat-label">UTC Date &amp; Time</span>
+        <span class="stat-value" id="utc-time">--</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Sun Overhead</span>
+        <span class="stat-value" id="sun-position">--</span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <label class="control-check">
+        <input type="checkbox" id="toggle-clouds" checked />
+        <span>Clouds</span>
+      </label>
+      <label class="control-check">
+        <input type="checkbox" id="toggle-atmosphere" checked />
+        <span>Atmosphere</span>
+      </label>
+      <div class="globe-actions">
+        <button id="reset-camera-btn" type="button">Reset Camera</button>
+        <a class="map-link" href="/" id="map-link">2D Map</a>
+      </div>
+      <p class="hint">Drag or pinch to orbit &middot; scroll to zoom</p>
+    </div>
+  </aside>
+
+  <div class="globe-error" id="globe-error" role="alert" hidden>
+    <strong id="globe-error-title">The 3D globe could not be started.</strong>
+    <p id="globe-error-detail"></p>
+    <div class="globe-error-actions">
+      <button type="button" id="globe-retry-btn">Try again</button>
+      <a href="/" id="globe-error-map-link">Open 2D Map</a>
+    </div>
+  </div>
+
+  <div class="globe-loading" id="globe-loading" aria-live="polite">Loading globe&hellip;</div>
+
+  <script>
+    // Watchdog: a failed module import (Three.js or globe.js itself) aborts the
+    // module before it can show its own failure state, so catch it here.
+    (function () {
+      function showWatchdogFailure(title, detail) {
+        var errorEl = document.getElementById('globe-error');
+        if (!errorEl || !errorEl.hidden) return;
+        document.getElementById('globe-error-title').textContent = title;
+        document.getElementById('globe-error-detail').textContent = detail;
+        errorEl.hidden = false;
+        var loading = document.getElementById('globe-loading');
+        if (loading) loading.hidden = true;
+        var badge = document.getElementById('live-badge');
+        if (badge) badge.hidden = true;
+      }
+
+      window.addEventListener('error', function (event) {
+        if (window.__daylightGlobe) return; // globe started successfully
+        var src = (event.target && event.target.src) || event.filename || '';
+        if (src.indexOf('globe.js') !== -1 || src.indexOf('three.module') !== -1) {
+          showWatchdogFailure(
+            'The 3D globe script could not be loaded.',
+            'Three.js or the globe script failed to load (see browser console). Check the network and try again.'
+          );
+        }
+      }, true);
+
+      // Final fallback: if the globe never starts within 15s, surface an error
+      // instead of leaving a blank page.
+      setTimeout(function () {
+        if (window.__daylightGlobe && window.__daylightGlobe.getState().started) return;
+        showWatchdogFailure(
+          'The 3D globe could not be started.',
+          'It took too long to load. Check the network or browser console, then try again. The 2D map is unaffected.'
+        );
+      }, 15000);
+    }());
+  </script>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three.module.min.js",
+      "three/addons/": "./vendor/addons/"
+    }
+  }
+  </script>
+  <script src="solar.js?v=20260722a"></script>
+  <script src="globe-math.js?v=20260804a"></script>
+  <script type="module" src="globe.js?v=20260804a"></script>
+</body>
+</html>

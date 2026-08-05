@@ -1,0 +1,379 @@
+/* Daylight Globe — dark space-oriented companion to the 2D Daylight Map.
+   Shares the app's visual language: translucent dark panel, gold accents,
+   system font stack, rounded controls, restrained borders. */
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  background: #05070f;
+  color: #e8ebf2;
+}
+
+#globe-scene {
+  position: fixed;
+  inset: 0;
+  /* Decorative container only — never intercept pointer events, or the
+     canvas below it would be unable to receive drag/zoom input. */
+  pointer-events: none;
+}
+
+#globe-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  outline: none;
+}
+
+#globe-canvas:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(255, 216, 92, 0.65);
+}
+
+.panel {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 280px;
+  max-width: calc(100% - 32px);
+  background: rgba(11, 16, 38, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 18px;
+  z-index: 1000;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.panel-handle {
+  display: none;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.panel h1 {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: #ffd700;
+}
+
+.panel h1 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.panel h1 a:hover,
+.panel h1 a:focus-visible {
+  color: #ffe08a;
+  outline: none;
+}
+
+.subtitle {
+  margin: 0 0 16px 0;
+  font-size: 0.82rem;
+  color: #8b93a8;
+  line-height: 1.4;
+}
+
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(122, 198, 143, 0.12);
+  border: 1px solid rgba(122, 198, 143, 0.35);
+  color: #a7e3b8;
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #7ac68f;
+  animation: live-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.stat-label {
+  font-size: 0.72rem;
+  color: #8b93a8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-value {
+  font-size: 0.88rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #f0f3fa;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.control-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: #c6cbda;
+  cursor: pointer;
+}
+
+.control-check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #ffd85c;
+  cursor: pointer;
+}
+
+.globe-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.globe-actions button,
+.globe-actions .map-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.globe-actions button {
+  border: 1px solid rgba(91, 140, 255, 0.4);
+  background: rgba(91, 140, 255, 0.13);
+  color: #b9cbff;
+  font-family: inherit;
+}
+
+.globe-actions button:hover,
+.globe-actions button:focus-visible {
+  background: rgba(91, 140, 255, 0.26);
+  border-color: rgba(120, 160, 255, 0.7);
+  color: #ffffff;
+  outline: none;
+}
+
+.globe-actions .map-link {
+  border: 1px solid rgba(255, 216, 92, 0.45);
+  background: rgba(255, 216, 92, 0.14);
+  color: #ffe08a;
+}
+
+.globe-actions .map-link:hover,
+.globe-actions .map-link:focus-visible {
+  background: rgba(255, 216, 92, 0.26);
+  border-color: rgba(255, 216, 92, 0.8);
+  color: #fff6dd;
+  outline: none;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.68rem;
+  color: #7f889d;
+  text-align: center;
+}
+
+/* Loading + failure states (non-blocking) */
+.globe-loading {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2000;
+  padding: 10px 18px;
+  background: rgba(11, 16, 38, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #c6cbda;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.globe-error {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3000;
+  width: min(420px, calc(100% - 32px));
+  padding: 18px 20px;
+  background: rgba(38, 20, 20, 0.96);
+  border: 1px solid rgba(224, 122, 122, 0.45);
+  border-radius: 14px;
+  color: #ffd9d9;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+  text-align: center;
+}
+
+.globe-error p {
+  margin: 8px 0 14px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #e8b7b7;
+}
+
+.globe-error-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.globe-error-actions button,
+.globe-error-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 7px 16px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.globe-error-actions button {
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-family: inherit;
+}
+
+.globe-error-actions button:hover,
+.globe-error-actions button:focus-visible {
+  background: rgba(255, 255, 255, 0.28);
+  outline: none;
+}
+
+.globe-error-actions a {
+  border: 1px solid rgba(255, 216, 92, 0.5);
+  background: rgba(255, 216, 92, 0.16);
+  color: #ffe08a;
+}
+
+.globe-error-actions a:hover,
+.globe-error-actions a:focus-visible {
+  background: rgba(255, 216, 92, 0.3);
+  outline: none;
+}
+
+.globe-error[hidden] {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  .panel {
+    top: auto;
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: none;
+    border-radius: 14px;
+    padding: 12px 14px 14px;
+  }
+
+  .subtitle {
+    display: none;
+  }
+
+  .panel-header {
+    margin-bottom: 10px;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .stat {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+  }
+
+  .stat-value {
+    text-align: left;
+  }
+
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .globe-actions {
+    grid-column: 1 / -1;
+  }
+
+  .hint {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

@@ -8,6 +8,7 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 
 ### Visualization
 - **Live day/night visualization** with accurate Sun tracking
+- **3D Globe** — a photorealistic, interactive Three.js globe on its own page (`globe.html`) that renders the same `SolarMath` day/night state in real time. See [3D Globe](#3d-globe) below.
 - **State-aware update scheduler** — the clock display updates every second, but the expensive twilight tile redraw and chart rendering run every ~20 seconds in live mode. Manual interactions (slider, presets, resize, tab switch) render immediately. Work is skipped entirely while the browser tab is hidden and catches up on return.
 - **Debounced hover feedback** — map coordinates update instantly on hover, while sunrise/sunset times and chart rebuilds are debounced ~200 ms to avoid redundant SunCalc calls during continuous mouse movement.
 - **Smooth twilight gradient** instead of a hard terminator:
@@ -68,11 +69,62 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 ### Permalink state
 The clean root route always starts from the same world overview; ordinary panning and browser geolocation coordinates are session-only and are not stored. Exact shared views can still be opened with `?time=&lat=&lon=&zoom=`. See [Permalink Format](#permalink-format) below.
 
+## 3D Globe
+
+A separate, directly-accessible page (`globe.html`) renders a photorealistic, interactive 3D Earth using **Three.js 0.160.0** (vendored locally under `html/vendor/`). It reuses **`SolarMath` (solar.js)** — there is no second astronomy implementation. The 2D Leaflet map is untouched and keeps working exactly as before.
+
+### Page and controls
+- Reachable via the prominent gold **"3D Globe"** button on the main page's info panel; a reciprocal **"2D Map"** button returns to the map.
+- Compact translucent panel: "Daylight Globe" title, live/paused status, current UTC date and time, and **Sun Overhead** coordinates (subsolar point).
+- Controls: reset camera, cloud-layer visibility toggle, atmosphere visibility toggle.
+- Interaction: pointer drag / touch drag to orbit, wheel / pinch zoom, arrow keys + `+`/`-` when the canvas has keyboard focus, sensible min/max camera distance, subtle presentation auto-rotation that stops on first user interaction and is disabled under `prefers-reduced-motion`.
+- The globe starts in live mode and recomputes the solar direction **once per second** (never per frame). An optional `?time=ISO` query parameter (same format as the 2D page) pins the displayed instant — used for deterministic verification and permalinks.
+- Performance: pixel ratio capped at 2, correct resize handling, rendering paused while `document.hidden`, no per-frame allocations, and all shader state is updated via uniforms.
+- Failure behavior: if WebGL 2, Three.js, a required script, or a required local texture fails, a visible non-blocking error card explains the problem and offers both **"Try again"** (reload) and **"Open 2D Map"** links. A watchdog in `globe.html` catches module-import failures that would otherwise abort silently.
+
+### Files
+| File | Purpose |
+|------|---------|
+| `html/globe.html` | Globe page (markup, import map for Three.js, watchdog script) |
+| `html/globe.css` | Dark space-oriented styling consistent with the 2D page |
+| `html/globe.js` | ES module: scene, shaders, controls, lifecycle, failure states |
+| `html/globe-math.js` | Pure geographic ↔ 3D-vector helper (UMD, browser + Node, unit-tested) |
+| `html/vendor/three.module.min.js` | Three.js r160 module build (vendored locally, pinned) |
+| `html/vendor/addons/controls/OrbitControls.js` | Three.js r160 OrbitControls addon (vendored, pinned) |
+| `html/assets/globe/*` | Local NASA Earth textures (see [Attribution](#attribution)) |
+| `tests/globe.test.js` | Unit tests for globe-math.js |
+
+### Coordinate convention (single source of truth)
+The globe uses a unit sphere with three.js `SphereGeometry` orientation. Mapping geography to object space (east-positive longitude, matching Leaflet and `solar.js`):
+
+```
+x = cos(lat) · cos(lng)
+y = sin(lat)
+z = −cos(lat) · sin(lng)
+```
+
+- `+Y` = north pole, `+X` = (0°, 0°) prime meridian, `+Z` = (0°, −90°), `−Z` = (0°, +90°), `−X` = antimeridian.
+- Right-handed (X × Y = Z). Texture UVs are three.js defaults: `u = (lng + 180)/360` (seam at the antimeridian), `v = 1 − (lat + 90)/180` (north at top). Standard equirectangular NASA textures map with **no flip** in either axis.
+- The Earth mesh is **never rotated**. The camera orbits the fixed globe; the Sun's object-space direction is recomputed from `SolarMath.getSubsolarPoint()` each second and uploaded as a uniform. Presentation auto-rotation moves only the camera, so the continent-to-sunlight relationship is exact at every frame.
+
+### How the shader derives daylight, twilight, and night
+Per fragment, `sin(altitude) = dot(surfaceNormal, uSunDir)` — the identical quantity to `SolarMath.getSolarSinAltitude()` on the 2D map. The four thresholds from `SolarMath.TWILIGHT_THRESHOLDS` are passed as a uniform vector:
+
+- **Daylight** — `sin(−0.833°)` (the app's refraction convention). Sunlit day texture, diffuse `clamp(sinAlt, 0, 1)` lighting, and ocean specular (Blinn–Phong, gated by the NASA water mask) apply above this band. Smoothing is symmetric around the threshold, so the geographic boundary is exact.
+- **Civil / nautical / astronomical twilight** — `sin(−6°)`, `sin(−12°)`, `sin(−18°)`. The surface color shifts from sunlit texture toward a deep twilight blue between the daylight and astronomical thresholds (`twilightDepth`), so the terminator reads atmospheric and continuous without moving any boundary.
+- **Night** — below −18°. City lights fade in naturally as altitude falls (a smoothstep centered on the astronomical threshold, fully visible ~3.5° deeper) and are **only** on the dark side; night-side clouds stay near-black.
+
+Lighting, tone mapping (ACES fitted curve) and the sRGB transfer function are implemented inline in the shaders; sRGB-tagged textures are uploaded as sRGB textures so sampling yields linear values. There is no ambient light washing out the night side.
+
+### Verification
+`tests/globe.test.js` locks the convention against cardinal cases (equator, poles, ±90°, antimeridian), unit length, invalid input, and — most importantly — cross-checks `GlobeMath` against `SolarMath.getSolarSinAltitude()` over a lat/lng grid at the four 2026 seasonal events (March equinox, June solstice, September equinox, December solstice), including the −0.833° refraction terminator placement.
+
 ## Tech Stack
 
 | Layer | Tool |
 |-------|------|
 | Mapping | [Leaflet](https://leafletjs.com/) 1.9.4 |
+| 3D rendering | [Three.js](https://threejs.org/) r160 (vendored locally, pinned; MIT) |
 | Solar position (subsolar + twilight) | Self-contained first-principles algorithm (low-precision solar position + GMST + geodesic spherical caps), extracted into `html/solar.js` for unit testing |
 | Auxiliary solar/lunar data | [SunCalc](https://github.com/mourner/suncalc) 1.9.0 — used only for Greenwich solar noon, moon phase, and hover sunrise/sunset/day-length |
 | Timezone lookup | [tz-lookup](https://github.com/darkskyapp/tz-lookup-oss) 6.1.25 — maps arbitrary lat/lng points to IANA timezones for local civil time |
@@ -133,19 +185,36 @@ Longitudes are **east-positive** throughout, matching both Leaflet and SunCalc:
 ```
 .
 ├── html/
-│   ├── index.html          # Main page
+│   ├── index.html          # Main 2D map page
+│   ├── globe.html          # 3D globe page (ES module entry, import map)
 │   ├── solar.js            # Pure solar/astronomy math (UMD module, testable in Node)
-│   ├── app.js              # Map, UI logic (depends on solar.js)
-│   ├── style.css           # Styling
-│   └── favicon.svg         # Site icon
+│   ├── globe-math.js       # Pure geographic ↔ 3D vector conversion (UMD module)
+│   ├── app.js              # 2D map, UI logic (depends on solar.js)
+│   ├── view.js             # 2D viewport helper (depends on nothing)
+│   ├── globe.js            # 3D globe app (ES module, depends on solar.js + globe-math.js)
+│   ├── style.css           # 2D page styling
+│   ├── globe.css           # 3D globe page styling
+│   ├── favicon.svg         # Site icon
+│   ├── vendor/
+│   │   ├── three.module.min.js          # Three.js r160 (pinned, MIT)
+│   │   └── addons/controls/OrbitControls.js  # Three.js r160 addon (pinned, MIT)
+│   └── assets/globe/       # Local Earth textures (NASA; see Attribution)
+│       ├── day.jpg         # Blue Marble albedo (4096×2048)
+│       ├── night.png       # Black Marble city lights (4096×2048)
+│       ├── bump.jpg        # Shaded relief + bathymetry bump map (2048×1024)
+│       ├── specular.jpg    # Land/ocean specular mask (2048×1024)
+│       └── clouds.png      # Cloud cover layer (2048×1024, RGBA)
 ├── tests/
 │   ├── solar.test.js       # Unit tests for solar math (node:test runner)
-│   └── presets.test.js     # Seasonal preset and year-boundary tests
+│   ├── globe.test.js       # Unit tests for globe-math.js (node:test runner)
+│   ├── presets.test.js     # Seasonal preset and year-boundary tests
+│   ├── view.test.js        # Viewport helper tests
+│   └── edge-cases.test.js  # Permalink/edge-case tests
 ├── docker-compose.yml      # nginx static container with healthcheck
 ├── nginx.conf              # nginx config: gzip, caching, security headers, CSP Report-Only
 ├── deploy.sh               # One-command deploy to the VPS
 ├── package.json            # Dev tooling (ESLint, tests)
-├── eslint.config.js        # ESLint 9 flat config
+├── eslint.config.js        # ESLint 9 flat config (module override for globe.js)
 ├── .github/workflows/ci.yml # GitHub Actions: lint + test on push/PR
 ├── README.md               # This file
 └── .gitignore
@@ -163,7 +232,7 @@ python3 -m http.server 8000 --directory html
 npx serve html
 ```
 
-Then open http://localhost:8000.
+Then open http://localhost:8000 for the 2D map and http://localhost:8000/globe.html for the 3D globe. Both pages work from the same static server with no build step. For deterministic globe states during development, append `?time=2026-06-21T08:24:00Z` (any ISO 8601 UTC instant).
 
 ### Testing and Linting
 
@@ -193,8 +262,8 @@ The script:
 
 The nginx configuration (`nginx.conf`) provides:
 - Gzip compression for CSS, JS, JSON, and SVG
-- Long-term caching for versioned assets (files with `?v=` query params)
-- `no-cache` revalidation for `index.html`
+- Long-term caching for versioned assets (files with `?v=` query params), including the local globe textures (`png/jpg/jpeg/webp`)
+- `no-cache` revalidation for `index.html` and `globe.html`
 - Security headers (X-Frame-Options, X-Content-Type-Options, Referrer-Policy)
 - CSP in Report-Only mode (move to enforcement after reviewing violations)
 - Container healthcheck via `wget --spider`
@@ -216,12 +285,31 @@ https://daylight.forkstech.com/?time=2026-12-22T02:56:24.000Z&lat=47.6000&lon=-1
 | `lon`  | Map center longitude (east-positive). `0` is honored (not treated as missing). |
 | `zoom` | Leaflet zoom level (2–12). |
 
+The globe page accepts the same `?time=` parameter (e.g. `globe.html?time=2026-06-21T08:24:00Z`) to pin the displayed instant; omit it for live mode.
+
 The **Follow Sun** control starts *off* so shared and first-load views are preserved instead of being immediately panned away to the Sun marker. Normal browsing keeps the address bar clean; map coordinates stay in the URL only when the page was opened as an explicit map view. **Reset View** returns to the canonical root camera and removes those view parameters.
 
 ## Known Limitations
 
 - **Sun marker** uses the nearest wrapped world copy to stay visually continuous across the antimeridian. The displayed coordinate remains normalized to `[−180, 180]`.
 - **Geolocation requires HTTPS and user permission.** On `http://` (e.g. local dev without TLS) or if the user denies the prompt, the button reports the error inline.
+
+## Attribution
+
+All globe textures are NASA imagery (public domain). Day/night texture provenance and the exact source files are recorded in `html/assets/globe/ATTRIBUTION.md`.
+
+| Asset | Source | License / status |
+|-------|--------|------------------|
+| `day.jpg` — Blue Marble albedo | NASA Blue Marble imagery, redistributed via the [three-globe](https://github.com/vasturiano/three-globe) example assets (MIT repository) | Public domain (NASA) |
+| `night.png` — city lights | NASA Black Marble 2016 (VIIRS) composite, stitched from NASA GIBS WMTS tiles (`VIIRS_Black_Marble`, 2016-01-01) | Public domain (NASA) |
+| `bump.jpg` — shaded relief + bathymetry | NASA Blue Marble imagery, stitched from NASA GIBS WMTS tiles (`BlueMarble_ShadedRelief_Bathymetry`) | Public domain (NASA) |
+| `specular.jpg` — land/ocean mask | NASA Blue Marble water mask, redistributed via the [three.js](https://github.com/mrdoob/three.js) examples (MIT repository) | Public domain (NASA) |
+| `clouds.png` — cloud cover | NASA Terra MODIS cloud composite, redistributed via the three.js examples (MIT repository) | Public domain (NASA) |
+| `three.module.min.js`, `OrbitControls.js` | [three.js](https://github.com/mrdoob/three.js) r160 | MIT |
+
+The star background is procedural (generated in `globe.js`), so it needs no attribution.
+
+NASA imagery courtesy of the [NASA Earth Observatory](https://earthobservatory.nasa.gov) and the [Global Imagery Browse Services (GIBS)](https://earthdata.nasa.gov/eosdis/gibs).
 
 ## License
 
