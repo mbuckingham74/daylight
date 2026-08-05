@@ -58,9 +58,14 @@
 
   <div class="globe-loading" id="globe-loading" aria-live="polite">Loading globe&hellip;</div>
 
+  <script src="globe-watchdog.js?v=20260805a"></script>
   <script>
     // Watchdog: a failed module import (Three.js or globe.js itself) aborts the
     // module before it can show its own failure state, so catch it here.
+    // Deliberately NO timeout: slow texture downloads are not failures and must
+    // never produce a failure panel. globe.js reports texture and WebGL errors
+    // itself (with retry + a link to the 2D map) and clears all loading/error
+    // state on success, so this watchdog only covers module-level failures.
     (function () {
       function showWatchdogFailure(title, detail) {
         var errorEl = document.getElementById('globe-error');
@@ -77,36 +82,27 @@
       window.addEventListener('error', function (event) {
         if (window.__daylightGlobe) return; // globe started successfully
         var src = (event.target && event.target.src) || event.filename || '';
-        if (src.indexOf('globe.js') !== -1 || src.indexOf('three.module') !== -1) {
+        if (window.GlobeWatchdog.isGlobeModuleLoadFailure(src)) {
           showWatchdogFailure(
             'The 3D globe script could not be loaded.',
             'Three.js or the globe script failed to load (see browser console). Check the network and try again.'
           );
         }
       }, true);
-
-      // Final fallback: if the globe never starts within 15s, surface an error
-      // instead of leaving a blank page.
-      setTimeout(function () {
-        if (window.__daylightGlobe && window.__daylightGlobe.getState().started) return;
-        showWatchdogFailure(
-          'The 3D globe could not be started.',
-          'It took too long to load. Check the network or browser console, then try again. The 2D map is unaffected.'
-        );
-      }, 15000);
     }());
   </script>
 
   <script type="importmap">
   {
     "imports": {
-      "three": "./vendor/three.module.min.js",
-      "three/addons/": "./vendor/addons/"
+      "three": "./vendor/three.module.min.js?v=20260805a",
+      "three/addons/": "./vendor/addons/",
+      "three/addons/controls/OrbitControls.js": "./vendor/addons/controls/OrbitControls.js?v=20260805a"
     }
   }
   </script>
   <script src="solar.js?v=20260722a"></script>
-  <script src="globe-math.js?v=20260804a"></script>
-  <script type="module" src="globe.js?v=20260804a"></script>
+  <script src="globe-math.js?v=20260805a"></script>
+  <script type="module" src="globe.js?v=20260805a"></script>
 </body>
 </html>

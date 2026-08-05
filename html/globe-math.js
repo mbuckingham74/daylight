@@ -151,6 +151,36 @@
   }
 
   /**
+   * Twilight depth from sin(solar altitude), mirroring the globe fragment
+   * shader's computeLightState() so the JS verification hook can reproduce
+   * the per-fragment value exactly.
+   *
+   * Returns 0 at or above the daylight boundary (sin(−0.833°), the app's
+   * apparent-horizon convention), rises continuously as the Sun falls through
+   * civil (−6°), nautical (−12°), and astronomical (−18°) twilight, and is 1
+   * at or below the astronomical threshold. The thresholds are numerically
+   * ordered (astronomical < daylight) and the GLSL smoothstep edge order is
+   * preserved via explicit inversion: 1 − smoothstep(astronomical, daylight).
+   *
+   * @param {number} sinAlt — sin(solar altitude) in [-1, 1]
+   * @param {object} thresholds — SolarMath.TWILIGHT_THRESHOLDS (only
+   *   .daylight and .astronomical are read; other keys ignored)
+   * @returns {number|null} twilight depth in [0, 1], or null for invalid input
+   */
+  function twilightDepth(sinAlt, thresholds) {
+    if (typeof sinAlt !== 'number' || !isFinite(sinAlt) ||
+        !thresholds || typeof thresholds.daylight !== 'number' ||
+        typeof thresholds.astronomical !== 'number' ||
+        !isFinite(thresholds.daylight) || !isFinite(thresholds.astronomical)) {
+      return null;
+    }
+    var t = (sinAlt - thresholds.astronomical) /
+      (thresholds.daylight - thresholds.astronomical);
+    t = t < 0 ? 0 : (t > 1 ? 1 : t);
+    return 1 - t * t * (3 - 2 * t);
+  }
+
+  /**
    * Check whether a vector is a unit vector (within a small epsilon).
    * Catches non-normalized direction vectors before they break shading.
    *
@@ -175,6 +205,7 @@
     vector3ToGeo,
     sunDirection,
     sineSolarAltitude,
+    twilightDepth,
     isUnitVector
   };
 }));

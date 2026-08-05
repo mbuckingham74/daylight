@@ -148,6 +148,56 @@ describe('invalid input handling', () => {
   });
 });
 
+describe('twilightDepth — shader twilight-depth semantics', () => {
+  const T = SM.TWILIGHT_THRESHOLDS;
+
+  test('is approximately 0 at or above the daylight boundary', () => {
+    assert.ok(GlobeMath.twilightDepth(T.daylight, T) < 1e-12, 'at daylight threshold');
+    assert.equal(GlobeMath.twilightDepth(T.daylight + 0.1, T), 0, 'above daylight');
+    assert.equal(GlobeMath.twilightDepth(0, T), 0, 'geometric horizon');
+    assert.equal(GlobeMath.twilightDepth(1, T), 0, 'sun overhead');
+  });
+
+  test('is approximately 1 at or below the astronomical threshold', () => {
+    assert.ok(Math.abs(1 - GlobeMath.twilightDepth(T.astronomical, T)) < 1e-12, 'at astronomical threshold');
+    assert.equal(GlobeMath.twilightDepth(T.astronomical - 0.1, T), 1, 'below astronomical');
+    assert.equal(GlobeMath.twilightDepth(-1, T), 1, 'deep night');
+  });
+
+  test('increases continuously as the Sun falls through civil, nautical, astronomical twilight', () => {
+    const civil = GlobeMath.twilightDepth(T.civil, T);
+    const nautical = GlobeMath.twilightDepth(T.nautical, T);
+    assert.ok(civil > 0 && civil < 1, `civil depth in range: ${civil}`);
+    assert.ok(nautical > civil, `nautical (${nautical}) deeper than civil (${civil})`);
+    assert.ok(T.astronomical < T.nautical && T.nautical < T.civil && T.civil < T.daylight,
+      'threshold ordering is ascending (numerically ordered edges)');
+  });
+
+  test('is 0.5 halfway between the daylight and astronomical thresholds', () => {
+    const mid = (T.daylight + T.astronomical) / 2;
+    assert.ok(Math.abs(GlobeMath.twilightDepth(mid, T) - 0.5) < 1e-12, 'symmetric midpoint');
+  });
+
+  test('equals 1 − smoothstep(astronomical, daylight, sinAlt) — the shader expression', () => {
+    const smoothstep = (e0, e1, x) => {
+      const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
+      return t * t * (3 - 2 * t);
+    };
+    for (let sinAlt = -1; sinAlt <= 1; sinAlt += 0.05) {
+      const expected = 1 - smoothstep(T.astronomical, T.daylight, sinAlt);
+      assert.ok(Math.abs(GlobeMath.twilightDepth(sinAlt, T) - expected) < 1e-12,
+        `sinAlt ${sinAlt}: ${GlobeMath.twilightDepth(sinAlt, T)} vs ${expected}`);
+    }
+  });
+
+  test('returns null for invalid input', () => {
+    assert.equal(GlobeMath.twilightDepth(NaN, T), null);
+    assert.equal(GlobeMath.twilightDepth(0, null), null);
+    assert.equal(GlobeMath.twilightDepth(0, { daylight: 0 }), null);
+    assert.equal(GlobeMath.twilightDepth('0', T), null);
+  });
+});
+
 describe('sunDirection and sineSolarAltitude — alignment with SolarMath', () => {
   // Deterministic instants: seasonal events of 2026 (times from solar.test.js)
   const instants = {

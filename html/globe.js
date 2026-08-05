@@ -22,9 +22,13 @@
  * sin(altitude) = dot(surfaceNormal, uSunDir), using the exact twilight
  * thresholds from SolarMath.TWILIGHT_THRESHOLDS (daylight = −0.833° including
  * the app's refraction convention, civil −6°, nautical −12°, astronomical
- * −18°). The same quantity drives SolarMath.getSolarSinAltitude() on the 2D
- * map, so both views agree exactly. Smooth transitions are symmetric around
- * each threshold and therefore never move a geographic boundary.
+ * −18°). Direct sunlight ramps to zero exactly at the daylight threshold, so
+ * the visible day/night boundary follows the documented apparent-horizon
+ * convention; the bluish tint below it is atmospheric (scattered) light and
+ * never brightens the surface at or below the boundary. The same quantity
+ * drives SolarMath.getSolarSinAltitude() on the 2D map, so both views agree
+ * exactly. Smooth transitions are symmetric around each threshold and
+ * therefore never move a geographic boundary.
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -269,6 +273,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   const LIGHT_STATE_CHUNK = `
     void computeLightState(
       out float sinAlt,
+      out float sunIntensity,
       out float dayBand,
       out float civilBand,
       out float nautBand,
@@ -282,7 +287,17 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
       civilBand = smoothstep(uThresholds.y - h, uThresholds.y + h, sinAlt);
       nautBand = smoothstep(uThresholds.z - h, uThresholds.z + h, sinAlt);
       astroBand = smoothstep(uThresholds.w - h, uThresholds.w + h, sinAlt);
-      twilightDepth = smoothstep(uThresholds.x, uThresholds.w, sinAlt);
+      // Direct sunlight intensity shares the dayBand ramp, so the visible
+      // day/night boundary sits exactly on the daylight threshold (sin
+      // −0.833°, the documented apparent-horizon convention) and there is no
+      // direct light at or below it; atmospheric twilight is separate below.
+      sunIntensity = dayBand;
+      // twilightDepth: approximately 0 at or above the daylight boundary,
+      // rising continuously to approximately 1 at or below the astronomical
+      // threshold. uThresholds is ordered x (daylight) > w (astronomical), so
+      // the smoothstep edges are reversed and the result inverted — GLSL
+      // smoothstep is undefined when edge0 >= edge1.
+      twilightDepth = 1.0 - smoothstep(uThresholds.w, uThresholds.x, sinAlt);
       nightFade = 1.0 - smoothstep(
         uThresholds.w - uNightFadeHalfWidth,
         uThresholds.w + uNightFadeHalfWidth,
@@ -344,13 +359,14 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
       void main() {
         float sinAlt;
+        float sunIntensity;
         float dayBand;
         float civilBand;
         float nautBand;
         float astroBand;
         float twilightDepth;
         float nightFade;
-        computeLightState(sinAlt, dayBand, civilBand, nautBand, astroBand, twilightDepth, nightFade);
+        computeLightState(sinAlt, sunIntensity, dayBand, civilBand, nautBand, astroBand, twilightDepth, nightFade);
 
         // Terrain detail via the shaded-relief bump map. A spherical tangent
         // frame is built from the world-space normal (guarded at the poles)
@@ -369,8 +385,11 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         vec3 nightTex = texture2D(uNightTex, vUv).rgb;
         float specMask = texture2D(uSpecTex, vUv).g;
 
-        // Sunlit day surface; dayBand smooths exactly at the −0.833° horizon.
-        float sunIntensity = clamp(sinAlt, 0.0, 1.0);
+        // Sunlit day surface: direct light ramps to zero exactly at the
+        // −0.833° daylight boundary (the app's apparent-horizon convention),
+        // matching the 2D map's daylight classification. There is no direct
+        // light at or below the boundary; the twilight tint applied below is
+        // atmospheric (scattered) light, so the night side never brightens.
         vec3 color = dayTex * uSunColor * sunIntensity * dayBand;
 
         // Atmospheric twilight tint between the daylight and astronomical
@@ -444,13 +463,14 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
       void main() {
         float sinAlt;
+        float sunIntensity;
         float dayBand;
         float civilBand;
         float nautBand;
         float astroBand;
         float twilightDepth;
         float nightFade;
-        computeLightState(sinAlt, dayBand, civilBand, nautBand, astroBand, twilightDepth, nightFade);
+        computeLightState(sinAlt, sunIntensity, dayBand, civilBand, nautBand, astroBand, twilightDepth, nightFade);
 
         // Subtle longitude drift: clouds move relative to the fixed Sun
         // direction, which changes cloud shading but never geography.
@@ -459,7 +479,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         float coverage = cloudSample.a;
         float brightness = cloudSample.r;
 
-        vec3 dayCol = vec3(brightness) * uSunColor * clamp(sinAlt, 0.0, 1.0) * dayBand;
+        vec3 dayCol = vec3(brightness) * uSunColor * sunIntensity * dayBand;
         // Warm terminator edge on the sun side of the civil band.
         dayCol += vec3(brightness) * vec3(1.0, 0.55, 0.25) * (1.0 - dayBand) * civilBand * 0.35;
         // Night-side clouds stay near-black: no uniform glow.
@@ -509,13 +529,14 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
       void main() {
         float sinAlt;
+        float sunIntensity;
         float dayBand;
         float civilBand;
         float nautBand;
         float astroBand;
         float twilightDepth;
         float nightFade;
-        computeLightState(sinAlt, dayBand, civilBand, nautBand, astroBand, twilightDepth, nightFade);
+        computeLightState(sinAlt, sunIntensity, dayBand, civilBand, nautBand, astroBand, twilightDepth, nightFade);
 
         // Rim glow on the backside sphere: strongest at the silhouette,
         // brighter on the day side, faint on the night side.
@@ -602,7 +623,11 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
     updateSolar(state.date);
     started = true;
+    // Successful initialization clears every loading and error state: a slow
+    // but successful texture download must never leave a stale failure panel.
+    els.error.hidden = true;
     els.loading.hidden = true;
+    els.liveBadge.hidden = false;
     lastFrameTime = performance.now();
     animate(lastFrameTime);
   }
@@ -680,6 +705,13 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     setTime: setDate,
     getSunDirection: () => ({ x: sunDirVector.x, y: sunDirVector.y, z: sunDirVector.z }),
     getSubsolar: () => SM.getSubsolarPoint(state.date),
+    // JS mirror of the shader's per-fragment twilight depth (0 at/above the
+    // daylight boundary, 1 at/below astronomical): cross-checks that the
+    // fragment math and SolarMath agree at any geographic point.
+    getTwilightDepthAt: (lat, lng) => GM.twilightDepth(
+      GM.sineSolarAltitude(sunDirVector, lat, lng),
+      SM.TWILIGHT_THRESHOLDS
+    ),
     getState: () => ({ started, live: state.live, date: state.date.toISOString() }),
     getScene: () => scene,
     getCamera: () => camera,

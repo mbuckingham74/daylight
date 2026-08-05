@@ -80,12 +80,13 @@ A separate, directly-accessible page (`globe.html`) renders a photorealistic, in
 - Interaction: pointer drag / touch drag to orbit, wheel / pinch zoom, arrow keys + `+`/`-` when the canvas has keyboard focus, sensible min/max camera distance, subtle presentation auto-rotation that stops on first user interaction and is disabled under `prefers-reduced-motion`.
 - The globe starts in live mode and recomputes the solar direction **once per second** (never per frame). An optional `?time=ISO` query parameter (same format as the 2D page) pins the displayed instant — used for deterministic verification and permalinks.
 - Performance: pixel ratio capped at 2, correct resize handling, rendering paused while `document.hidden`, no per-frame allocations, and all shader state is updated via uniforms.
-- Failure behavior: if WebGL 2, Three.js, a required script, or a required local texture fails, a visible non-blocking error card explains the problem and offers both **"Try again"** (reload) and **"Open 2D Map"** links. A watchdog in `globe.html` catches module-import failures that would otherwise abort silently.
+- Failure behavior: if WebGL 2, Three.js, a required script, or a required local texture fails, a visible non-blocking error card explains the problem and offers both **"Try again"** (reload) and **"Open 2D Map"** links. A watchdog in `globe.html` catches module-import failures that would otherwise abort silently; slow texture downloads never trigger a failure panel (no arbitrary load timeout), and a successful initialization clears every loading and error state.
 
 ### Files
 | File | Purpose |
 |------|---------|
 | `html/globe.html` | Globe page (markup, import map for Three.js, watchdog script) |
+| `html/globe-watchdog.js` | Module-failure detection for the watchdog (unit-tested; texture failures excluded) |
 | `html/globe.css` | Dark space-oriented styling consistent with the 2D page |
 | `html/globe.js` | ES module: scene, shaders, controls, lifecycle, failure states |
 | `html/globe-math.js` | Pure geographic ↔ 3D-vector helper (UMD, browser + Node, unit-tested) |
@@ -110,7 +111,7 @@ z = −cos(lat) · sin(lng)
 ### How the shader derives daylight, twilight, and night
 Per fragment, `sin(altitude) = dot(surfaceNormal, uSunDir)` — the identical quantity to `SolarMath.getSolarSinAltitude()` on the 2D map. The four thresholds from `SolarMath.TWILIGHT_THRESHOLDS` are passed as a uniform vector:
 
-- **Daylight** — `sin(−0.833°)` (the app's refraction convention). Sunlit day texture, diffuse `clamp(sinAlt, 0, 1)` lighting, and ocean specular (Blinn–Phong, gated by the NASA water mask) apply above this band. Smoothing is symmetric around the threshold, so the geographic boundary is exact.
+- **Daylight** — `sin(−0.833°)` (the app's refraction convention). Sunlit day texture, ocean specular (Blinn–Phong, gated by the NASA water mask), and direct sunlight intensity (same smoothing ramp as the band) apply above this threshold, so the visible day/night boundary sits exactly on the documented apparent horizon. Smoothing is symmetric around the threshold, so the geographic boundary is exact. There is no direct light at or below the boundary — the bluish surface tint below it is atmospheric (scattered) light, kept separate so the night side never brightens.
 - **Civil / nautical / astronomical twilight** — `sin(−6°)`, `sin(−12°)`, `sin(−18°)`. The surface color shifts from sunlit texture toward a deep twilight blue between the daylight and astronomical thresholds (`twilightDepth`), so the terminator reads atmospheric and continuous without moving any boundary.
 - **Night** — below −18°. City lights fade in naturally as altitude falls (a smoothstep centered on the astronomical threshold, fully visible ~3.5° deeper) and are **only** on the dark side; night-side clouds stay near-black.
 
