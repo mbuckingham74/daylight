@@ -257,9 +257,9 @@ To deploy from this repo:
 ```
 
 The script:
-1. Syncs `docker-compose.yml`, `nginx.conf`, and `html/` to `/home/michael/docker-configs/daylight/` on the VPS
-2. Pulls the latest `nginx:alpine` image
-3. Recreates/starts the `daylight-static` container
+1. Requires a clean, committed worktree and stages `docker-compose.yml`, `nginx.conf`, and `html/` under `/home/michael/deployments/` on ForksTech
+2. Validates the staged Compose model, installs it at `/home/michael/deployments/daylight/`, and records the exact source commit in `.deployment.json`
+3. Recreates only `daylight-static` with image pulling disabled
 
 The nginx configuration (`nginx.conf`) provides:
 - Gzip compression for CSS, JS, JSON, and SVG
