@@ -757,23 +757,38 @@
   const panelHandle = document.getElementById('panel-handle');
 
   // ── Mobile bottom sheet: collapsed/half/full states ─────────────────
-  // Tapping the handle cycles through states. State is not persisted to
-  // avoid trapping a returning user in a confusing layout.
+  // Activating the handle cycles through states. State is not persisted to
+  // avoid trapping a returning user in a confusing layout. The handle is a
+  // native button (X-02), so touch/pointer taps and keyboard activation
+  // (Enter/Space) all route through the same click -> advancePanelState
+  // path. aria-expanded reflects collapsed vs any expanded size; the
+  // state-aware aria-label names the next action because the visual handle
+  // has no text.
   const panelStates = ['collapsed', 'half', 'full'];
   let panelStateIndex = 1;
+
+  const PANEL_HANDLE_LABELS = {
+    collapsed: 'Expand information panel',
+    half: 'Enlarge information panel',
+    full: 'Collapse information panel'
+  };
 
   function applyPanelState() {
     panelStates.forEach(s => infoPanel.classList.remove(s));
     infoPanel.classList.add(panelStates[panelStateIndex]);
+    panelHandle.setAttribute('aria-expanded', panelStateIndex === 0 ? 'false' : 'true');
+    panelHandle.setAttribute('aria-label', PANEL_HANDLE_LABELS[panelStates[panelStateIndex]]);
     if (followSun) {
       setTimeout(() => centerMapOnSun(0.3), 320);
     }
   }
 
-  panelHandle.addEventListener('click', function () {
+  function advancePanelState() {
     panelStateIndex = (panelStateIndex + 1) % panelStates.length;
     applyPanelState();
-  });
+  }
+
+  panelHandle.addEventListener('click', advancePanelState);
 
   let followSun = false;
 
@@ -1145,6 +1160,10 @@
   }
   updatePresetSelection();
   followSunCheckbox.checked = followSun;
+  // Sync the initial sheet state class and handle ARIA (X-02): visually a
+  // no-op at both breakpoints (mobile base style already equals "half" and
+  // desktop has no rules for the sheet state classes).
+  applyPanelState();
 
   if (invalidUrlParams.length > 0) {
     urlState.showUrlParamNotice(invalidUrlParams);

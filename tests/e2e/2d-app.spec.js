@@ -339,3 +339,100 @@ test.describe('E2E-15 — X-01 city marker keyboard accessibility', () => {
     expect(actualLabels).toEqual(expectedLabels);
   });
 });
+
+test.describe('E2E-16 — X-02 mobile bottom-sheet keyboard accessibility', () => {
+  // The app's mobile bottom sheet is active at the existing <=480px breakpoint.
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  const handle = (page) => page.locator('#panel-handle');
+
+  test('X02-1 — pointer tap still cycles the bottom sheet', async ({ page }) => {
+    await page.goto(`/?time=${PINNED_ISO}`);
+    await expect(handle(page)).toBeVisible();
+    await expect(page.locator('#info-panel')).toHaveClass(/half/);
+
+    await handle(page).click();
+    await expect(page.locator('#info-panel')).toHaveClass(/full/);
+    await handle(page).click();
+    await expect(page.locator('#info-panel')).toHaveClass(/collapsed/);
+    await handle(page).click();
+    await expect(page.locator('#info-panel')).toHaveClass(/half/);
+  });
+
+  test('X02-2 — handle is keyboard reachable with a meaningful accessible name', async ({ page }) => {
+    await page.goto(`/?time=${PINNED_ISO}`);
+    await expect(handle(page)).toBeVisible();
+
+    // Native button semantics with a truthful initial state (half).
+    await expect(handle(page)).toHaveAttribute('type', 'button');
+    await expect(handle(page)).toHaveAttribute('aria-controls', 'info-panel');
+    await expect(handle(page)).toHaveAttribute('aria-expanded', 'true');
+    await expect(handle(page)).toHaveAttribute('aria-label', 'Enlarge information panel');
+
+    // Real sequential Tab navigation must reach the handle (fresh page load:
+    // map container -> 15 city markers -> zoom controls -> handle).
+    let reached = false;
+    for (let i = 0; i < 40 && !reached; i++) {
+      await page.keyboard.press('Tab');
+      reached = await page.evaluate(() =>
+        document.activeElement && document.activeElement.id === 'panel-handle');
+    }
+    expect(reached).toBe(true);
+  });
+
+  test('X02-3 — Enter on the focused handle advances the sheet', async ({ page }) => {
+    await page.goto(`/?time=${PINNED_ISO}`);
+    await handle(page).focus();
+    await page.keyboard.press('Enter');
+
+    await expect(page.locator('#info-panel')).toHaveClass(/full/);
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement && document.activeElement.id))
+      .toBe('panel-handle');
+  });
+
+  test('X02-4 — Space on the focused handle advances exactly one state without scrolling', async ({ page }) => {
+    await page.goto(`/?time=${PINNED_ISO}`);
+    await handle(page).focus();
+    const scrollBefore = await page.evaluate(() => window.scrollY);
+    await page.keyboard.press('Space');
+
+    await expect(page.locator('#info-panel')).toHaveClass(/full/);
+    // Exactly one advance: the next state is full, not collapsed.
+    await expect(page.locator('#info-panel')).not.toHaveClass(/collapsed/);
+    expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+  });
+
+  test('X02-5 — accessible state stays truthful across the full cycle', async ({ page }) => {
+    await page.goto(`/?time=${PINNED_ISO}`);
+    const expectState = async (stateClass, expanded, label) => {
+      await expect(page.locator('#info-panel')).toHaveClass(new RegExp(`\\b${stateClass}\\b`));
+      await expect(handle(page)).toHaveAttribute('aria-expanded', expanded);
+      await expect(handle(page)).toHaveAttribute('aria-label', label);
+    };
+
+    await expectState('half', 'true', 'Enlarge information panel');
+    await handle(page).focus();
+    await page.keyboard.press('Enter');
+    await expectState('full', 'true', 'Collapse information panel');
+    await page.keyboard.press('Enter');
+    await expectState('collapsed', 'false', 'Expand information panel');
+    await page.keyboard.press('Enter');
+    await expectState('half', 'true', 'Enlarge information panel');
+  });
+});
+
+test.describe('E2E-16 — X-02 desktop hidden behavior', () => {
+  test('X02-6 — desktop keeps the sheet handle hidden and out of the tab order', async ({ page }) => {
+    await page.goto(`/?time=${PINNED_ISO}`);
+    await expect(page.locator('#panel-handle')).toBeHidden();
+
+    let reached = false;
+    for (let i = 0; i < 30 && !reached; i++) {
+      await page.keyboard.press('Tab');
+      reached = await page.evaluate(() =>
+        document.activeElement && document.activeElement.id === 'panel-handle');
+    }
+    expect(reached).toBe(false);
+  });
+});

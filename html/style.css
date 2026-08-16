@@ -56,6 +56,13 @@ html, body {
 
 .panel-handle {
   display: none;
+  appearance: none;
+  background: none;
+  border: none;
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
 }
 
 .subtitle {
@@ -889,6 +896,14 @@ html, body {
     height: 4px;
     border-radius: 2px;
     background: rgba(255, 255, 255, 0.25);
+  }
+
+  /* Keyboard focus ring for the sheet handle (X-02): a gold ring inside the
+     bar plus a subtle tint stays clearly visible against the dark sheet. */
+  .panel-handle:focus-visible {
+    outline: 2px solid #ffd85c;
+    outline-offset: -2px;
+    background: rgba(255, 216, 92, 0.12);
   }
 
   .panel.collapsed {
