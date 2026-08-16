@@ -11,7 +11,12 @@
  * (mean longitude, mean anomaly, ecliptic longitude, obliquity) is accurate to
  * roughly 0.01 deg in ecliptic longitude and 1 arcminute in declination within
  * this range. Subsolar longitude (which depends on GMST) is accurate to about
- * 0.01 deg. Earth-Sun distance is accurate to roughly 1e-5 AU.
+ * 0.01 deg. Earth-Sun distance is accurate to roughly 1e-4 AU (the truncated
+ * Meeus series omits the secular eccentricity terms). These envelopes are
+ * independently regression-tested against USNO and JPL references in
+ * tests/solar-position-reference.test.js (observed maxima in that sample:
+ * declination 0.005 deg, subsolar longitude 0.008 deg, Earth-Sun distance
+ * 8.4e-5 AU, equation of time 0.05 minutes).
  *
  * The equinox/solstice instants inherit the same ~0.01 deg longitude
  * envelope, i.e. typically within ~10 minutes of published instants, with a

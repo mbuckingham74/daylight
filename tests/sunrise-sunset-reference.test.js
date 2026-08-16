@@ -8,10 +8,12 @@ const suncalcVersion = require('suncalc/package.json').version;
 // Reference values: U.S. Naval Observatory, Astronomical Applications
 // Department — "Sunrise/Sunset/Moonrise/Moonset Times" data service
 //   https://aa.usno.navy.mil/api/rstt/oneday
-// retrieved 2026-08-15 for three locations (Seattle, Sydney, Singapore) on
-// the four 2026 seasonal-event dates (12 cases). The USNO values derive
-// from the Astronomical Almanac ephemeris and are published to whole-minute
-// precision in UTC.
+// retrieved 2026-08-15. Twenty-four deterministic cases: three locations
+// (Seattle, Sydney, Singapore) on the four 2026 seasonal-event dates (12
+// cases, T-02) plus June 21 in 1950, 2000, 2050, and 2100 at the same three
+// locations (12 cases, T-03 year expansion), giving five sampled years
+// spanning 1950-2100. The USNO values derive from the Astronomical Almanac
+// ephemeris and are published to whole-minute precision in UTC.
 //
 // Production path under test: Daylight's sunrise/sunset readouts call
 // SunCalc.getTimes(date, lat, lng) directly (html/app.js) with the SunCalc
@@ -22,14 +24,14 @@ const suncalcVersion = require('suncalc/package.json').version;
 // The reference is genuinely independent: USNO computes rise/set from the
 // full Astronomical Almanac ephemeris, while SunCalc uses a low-precision
 // Meeus-based model (aa.quae.nl). Observed agreement across this sample is
-// 0.6-2.3 minutes (median ~1.2 minutes). The 3-minute regression bound is
+// 0.4-2.3 minutes (median ~1.3 minutes). The 3-minute regression bound is
 // the observed worst deviation (~2.3 minutes) plus the reference's full
 // ±30 s whole-minute rounding, rounded up to the next whole minute — the
 // same fixed-bound-over-observed-envelope approach as the D-04
-// seasons-reference test. It is a regression guard, not the product's
-// "±1 minute (mid-latitudes)" accuracy statement, which this sample
-// supports as a typical envelope but exceeds at its worst case (reported
-// separately as an accuracy-contract observation, not widened here).
+// seasons-reference test. It is a regression guard for the sampled cases,
+// not a global accuracy guarantee: the sample supports "typically within
+// ~1-2 minutes at mid-latitudes" but exceeds the old "±1 minute"
+// wording at its worst case (see README "Accuracy envelope").
 //
 // SunCalc.getTimes picks the rise/set pair of the local solar day nearest
 // the given instant, so the date is passed as 12:00 UTC of the intended
@@ -51,7 +53,19 @@ const USNO_CASES = [
   ['Singapore', 1.3521, 103.8198, '2026-03-20', '2026-03-19T23:09:00Z', '2026-03-20T11:15:00Z'],
   ['Singapore', 1.3521, 103.8198, '2026-06-21', '2026-06-20T23:00:00Z', '2026-06-21T11:12:00Z'],
   ['Singapore', 1.3521, 103.8198, '2026-09-23', '2026-09-22T22:54:00Z', '2026-09-23T11:00:00Z'],
-  ['Singapore', 1.3521, 103.8198, '2026-12-21', '2026-12-20T23:01:00Z', '2026-12-21T11:04:00Z']
+  ['Singapore', 1.3521, 103.8198, '2026-12-21', '2026-12-20T23:01:00Z', '2026-12-21T11:04:00Z'],
+  ['Seattle', 47.6062, -122.3321, '1950-06-21', '1950-06-21T12:11:00Z', '1950-06-22T04:11:00Z'],
+  ['Seattle', 47.6062, -122.3321, '2000-06-21', '2000-06-21T12:12:00Z', '2000-06-22T04:11:00Z'],
+  ['Seattle', 47.6062, -122.3321, '2050-06-21', '2050-06-21T12:12:00Z', '2050-06-22T04:11:00Z'],
+  ['Seattle', 47.6062, -122.3321, '2100-06-21', '2100-06-21T12:12:00Z', '2100-06-22T04:11:00Z'],
+  ['Sydney', -33.8688, 151.2093, '1950-06-21', '1950-06-20T21:00:00Z', '1950-06-21T06:53:00Z'],
+  ['Sydney', -33.8688, 151.2093, '2000-06-21', '2000-06-20T21:00:00Z', '2000-06-21T06:54:00Z'],
+  ['Sydney', -33.8688, 151.2093, '2050-06-21', '2050-06-20T21:00:00Z', '2050-06-21T06:54:00Z'],
+  ['Sydney', -33.8688, 151.2093, '2100-06-21', '2100-06-20T21:00:00Z', '2100-06-21T06:54:00Z'],
+  ['Singapore', 1.3521, 103.8198, '1950-06-21', '1950-06-20T23:00:00Z', '1950-06-21T11:12:00Z'],
+  ['Singapore', 1.3521, 103.8198, '2000-06-21', '2000-06-20T23:00:00Z', '2000-06-21T11:12:00Z'],
+  ['Singapore', 1.3521, 103.8198, '2050-06-21', '2050-06-20T23:01:00Z', '2050-06-21T11:13:00Z'],
+  ['Singapore', 1.3521, 103.8198, '2100-06-21', '2100-06-20T23:01:00Z', '2100-06-21T11:13:00Z']
 ];
 
 function daylightTimes(localDate, lat, lng) {

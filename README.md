@@ -148,16 +148,16 @@ The subsolar point and twilight boundaries are computed from first principles �
 
 ### Accuracy envelope
 
-The algorithms are low-precision but sufficient for visualization. The supported date range and approximate accuracies are:
+The algorithms are low-precision but sufficient for visualization. The supported date range (where Daylight computes) is **1900–2100**; the "accuracy" column records what independent reference comparisons actually observe — a sampled envelope, not a guaranteed full-range maximum. `tests/solar-position-reference.test.js` and `tests/seasons-reference.test.js` enforce these envelopes as regression bounds.
 
-| Quantity | Supported range | Approximate accuracy | Source |
-|----------|----------------|---------------------|--------|
-| Subsolar latitude (declination) | 1900–2100 | ±0.01° | Meeus ch. 25 |
-| Subsolar longitude (GMST) | 1900–2100 | ±0.01° | IERS 1996 GMST |
-| Earth-Sun distance | 1900–2100 | ±1×10⁻⁵ AU | Meeus ch. 25 |
-| Equation of time | 1900–2100 | ±0.1 minutes | Meeus ch. 28 |
+| Quantity | Supported range | Observed accuracy (reference sample) | Source |
+|----------|----------------|--------------------------------------|--------|
+| Subsolar latitude (declination) | 1900–2100 | within 0.01°; observed ≤0.005° in 33 USNO/JPL cases spanning 1900–2100 | Meeus ch. 25; USNO celnav + JPL Horizons |
+| Subsolar longitude (RA − GMST) | 1900–2100 | within 0.01°; observed ≤0.008° in 27 USNO cases (1900–2050), RA component ≤0.006° at the 2100 edge (GMST itself ≤0.0005°) | IERS 1996 GMST; USNO celnav/siderealtime + JPL Horizons |
+| Earth-Sun distance | 1900–2100 | within ~1×10⁻⁴ AU; observed ≤8.4×10⁻⁵ AU in 15 JPL cases | Meeus ch. 25 (truncated series) |
+| Equation of time | 1900–2100 | within 0.1 minutes; observed ≤0.05 minutes in 27 USNO-derived cases | Meeus ch. 28 |
 | Equinox/solstice times | 1900–2100 | typically within ~10 minutes; worst observed ~15 minutes in the sampled USNO reference set | Meeus ch. 25 (0.01° model) |
-| Sunrise/sunset (SunCalc) | 1900–2100 | ±1 minute (mid-latitudes) | SunCalc / refraction model |
+| Sunrise/sunset (SunCalc) | 1900–2100 | typically within ~1–2 minutes at sampled mid-latitudes; held within 3 minutes in the 24-case USNO regression set | SunCalc / refraction model |
 | Twilight thresholds | Any | Exact (defined by altitude angle) | Standard definitions |
 
 Seasonal-event instants are found by numerically refining the model's
@@ -172,13 +172,31 @@ maximum), and the regression bounds enforce that envelope.
 The sunrise/sunset times shown on the map come from SunCalc (see the
 [Tech Stack](#tech-stack)), not from the model above.
 `tests/sunrise-sunset-reference.test.js` regresses the production SunCalc
-1.9.0 path against US Naval Observatory sunrise/sunset times for twelve
-deterministic cases — Seattle, Sydney, and Singapore at the 2026 equinoxes
-and solstices — covering northern and southern mid-latitudes and the
-near-equatorial zone across the seasons. The USNO values are published to
-whole-minute precision in UTC; Daylight's SunCalc output is held within
-3 minutes of each published instant, the observed worst deviation in this
-sample (~2.3 minutes) plus the reference's ±30 s rounding.
+1.9.0 path against US Naval Observatory sunrise/sunset times for
+twenty-four deterministic cases — Seattle, Sydney, and Singapore at the
+four 2026 seasonal-event dates, plus June 21 in 1950, 2000, 2050, and
+2100 (five sampled years) — covering northern and southern mid-latitudes
+and the near-equatorial zone across the seasons. The USNO values are
+published to whole-minute precision in UTC; Daylight's SunCalc output is
+held within 3 minutes of each published instant, the observed worst
+deviation in this sample (~2.3 minutes) plus the reference's ±30 s
+rounding. Typical observed agreement is ~1–2 minutes, which is the
+accuracy stated in the table above; the ±3-minute bound is the regression
+tolerance for these sampled cases, not a global 1900–2100 guarantee.
+
+The solar-position model itself (subsolar point, twilight boundaries,
+orbital distance, equation of time) is validated by
+`tests/solar-position-reference.test.js`: 27 instants spanning 1900–2050
+against USNO "Celestial Navigation" (apparent geocentric solar declination
+and Greenwich hour angle) and "Sidereal Time" (GMST) services, plus the
+2080/2100 range edge against JPL Horizons (DE441) apparent solar right
+ascension/declination and Earth-Sun distance, where the USNO services
+stop. The references are independent of Daylight's Meeus-based model and
+far exceed its precision; the regression tolerances are the envelopes in
+the table above (0.01°, 1×10⁻⁴ AU, 0.1 minutes). Note that the USNO/JPL
+values are apparent positions (aberration and nutation included) while
+Daylight's model is geometric mean-of-date; that bounded convention
+difference (≈0.005–0.008°) is included in the observed envelopes.
 
 Outside the 1900–2100 range, the obliquity and eccentricity formulas accumulate larger errors. Dates far outside this range should not be relied upon for precise solar positions.
 
@@ -191,7 +209,7 @@ The math is verified against standard solstice/equinox values:
 | September equinox 2026 | −0.03° | ✓ |
 | December solstice 2026 | −23.44° | ✓ |
 
-Unit tests (run with `npm test`) verify declination bounds across multiple years, sunrise/sunset tolerance, polar day/night, antimeridian wrapping, leap day handling, and URL parameter validation.
+Unit tests (run with `npm test`) verify declination bounds across multiple years, solar-position accuracy against USNO/JPL references, sunrise/sunset tolerance against USNO references, polar day/night, antimeridian wrapping, leap day handling, and URL parameter validation.
 
 ### Longitude convention
 

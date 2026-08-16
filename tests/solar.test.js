@@ -134,8 +134,11 @@ describe('getSunEquatorial — declination bounds and reference values', () => {
 });
 
 describe('getSunEquatorial — multi-year reference values', () => {
-  // Independent reference values from USNO / standard almanac sources.
-  // Tolerance: 0.05° for declination (low-precision algorithm).
+  // Rounded almanac-style sanity values (2-decimal precision) for the
+  // declination at seasonal extremes, with a loose 0.05° tolerance. These
+  // are sanity bounds, not an independent accuracy contract; the
+  // independent solar-position validation lives in
+  // solar-position-reference.test.js.
   const referenceCases = [
     { date: '2020-06-21T00:00:00Z', deltaExpected: 23.44, label: 'Jun sol 2020' },
     { date: '2020-12-21T00:00:00Z', deltaExpected: -23.43, label: 'Dec sol 2020' },
