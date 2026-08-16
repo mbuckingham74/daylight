@@ -27,4 +27,6 @@ jobs:
 
       - run: bash tests/deploy.test.sh
 
+      - run: bash tests/nginx-headers.test.sh
+
       - run: npm test
