@@ -243,3 +243,99 @@ test.describe('E2E-10 — 2D dependency failure state', () => {
     await expect(banner.locator('button', { hasText: 'Reload page' })).toBeVisible();
   });
 });
+
+test.describe('E2E-15 — X-01 city marker keyboard accessibility', () => {
+  const cityMarker = (page, name) =>
+    page.locator(`.leaflet-overlay-pane path.city-marker[aria-label="${name}"]`);
+
+  const activeElementLabel = (page) =>
+    page.evaluate(() => {
+      const el = document.activeElement;
+      return el && el.getAttribute ? el.getAttribute('aria-label') : null;
+    });
+
+  test('X01-1 — London marker is keyboard reachable with a meaningful accessible name', async ({ page }) => {
+    await page.goto(`/?time=${PINNED_ISO}`);
+    const london = cityMarker(page, 'London');
+    await expect(london).toBeVisible();
+
+    // The marker path is a button-like control with the canonical label.
+    await expect(london).toHaveAttribute('tabindex', '0');
+    await expect(london).toHaveAttribute('role', 'button');
+    await expect(london).toHaveAttribute('aria-label', 'London');
+
+    // Real sequential keyboard navigation: body -> map container -> marker.
+    await page.keyboard.press('Tab');
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement && document.activeElement.id))
+      .toBe('map');
+    await page.keyboard.press('Tab');
+    await expect.poll(() => activeElementLabel(page)).toBe('London');
+
+    // The focused marker must expose the visible focus indicator.
+    const focusState = await page.evaluate(() => {
+      const el = document.activeElement;
+      const cs = window.getComputedStyle(el);
+      return { focusVisible: el.matches(':focus-visible'), stroke: cs.stroke, strokeWidth: cs.strokeWidth };
+    });
+    expect(focusState.focusVisible).toBe(true);
+    expect(focusState.stroke).toBe('rgb(255, 216, 92)');
+    expect(focusState.strokeWidth).toBe('4px');
+  });
+
+  test('X01-2 — Enter on the focused London marker selects the city', async ({ page }) => {
+    await page.goto(`/?time=${PINNED_ISO}`);
+    await cityMarker(page, 'London').focus();
+    await page.keyboard.press('Enter');
+
+    await expect(page.locator('#location-info h2')).toHaveText('London');
+    await expect(page.locator('#hover-coords')).toHaveText('51.51°N, 0.13°W');
+    await expect(page.locator('#hover-local-time')).not.toHaveText(/^--|Unavailable/);
+    await expect(page.locator('#hover-sunrise')).not.toHaveText('--');
+    await expect(page.locator('#hover-sunset')).not.toHaveText('--');
+  });
+
+  test('X01-3 — Space on the focused London marker selects the city without scrolling', async ({ page }) => {
+    await page.goto(`/?time=${PINNED_ISO}`);
+    await cityMarker(page, 'London').focus();
+    const scrollBefore = await page.evaluate(() => window.scrollY);
+    await page.keyboard.press('Space');
+
+    await expect(page.locator('#location-info h2')).toHaveText('London');
+    await expect(page.locator('#hover-coords')).toHaveText('51.51°N, 0.13°W');
+    await expect(page.locator('#hover-sunrise')).not.toHaveText('--');
+    expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+  });
+
+  test('X01-4 — second marker (New York) has a unique name and activates via keyboard', async ({ page }) => {
+    await page.goto(`/?time=${PINNED_ISO}`);
+    await expect(cityMarker(page, 'New York')).toHaveAttribute('aria-label', 'New York');
+
+    // Tab from the focused London marker reaches New York in canonical order.
+    await cityMarker(page, 'London').focus();
+    await page.keyboard.press('Tab');
+    await expect.poll(() => activeElementLabel(page)).toBe('New York');
+    await page.keyboard.press('Enter');
+
+    await expect(page.locator('#location-info h2')).toHaveText('New York');
+    await expect(page.locator('#hover-coords')).toHaveText('40.71°N, 74.01°W');
+    await expect(page.locator('#hover-sunrise')).not.toHaveText('--');
+  });
+
+  test('X01-5 — all 15 city markers are button-like controls in canonical order', async ({ page }) => {
+    const { markerCities } = require('../../html/cities.js');
+    const expectedLabels = markerCities.map(city => city.markerName || city.name);
+    expect(expectedLabels).toHaveLength(15);
+
+    await page.goto(`/?time=${PINNED_ISO}`);
+    await expect(page.locator('.leaflet-overlay-pane path.city-marker')).toHaveCount(15);
+    await expect(page.locator('.leaflet-overlay-pane path.city-marker[role="button"]')).toHaveCount(15);
+    await expect(page.locator('.leaflet-overlay-pane path.city-marker[tabindex="0"]')).toHaveCount(15);
+
+    const actualLabels = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.leaflet-overlay-pane path.city-marker'))
+        .map(path => path.getAttribute('aria-label'))
+    );
+    expect(actualLabels).toEqual(expectedLabels);
+  });
+});

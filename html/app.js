@@ -360,20 +360,47 @@
   function renderCities() {
     cityLayer.clearLayers();
     cities.forEach(city => {
+      // Canonical marker label (cities.js): same source for the visible
+      // tooltip and the accessible name (X-01).
+      const label = city.markerName || city.name;
+
       const marker = L.circleMarker([city.lat, city.lng], {
         radius: 4,
         fillColor: '#5b8cff',
         color: '#ffffff',
         weight: 1,
         opacity: 0.8,
-        fillOpacity: 0.9
+        fillOpacity: 0.9,
+        className: 'city-marker'
       }).addTo(cityLayer);
+
+      // Single activation path shared by pointer and keyboard (X-01):
+      // both must produce exactly the same city selection.
+      const activateCity = () => {
+        map.panTo([city.lat, city.lng], panOptions(0.8));
+        setFollowSun(false);
+        showLocationTimes(city.lat, city.lng, label, city.timeZone);
+      };
 
       marker.on('click', function (e) {
         L.DomEvent.stopPropagation(e);
-        map.panTo([city.lat, city.lng], panOptions(0.8));
-        setFollowSun(false);
-        showLocationTimes(city.lat, city.lng, city.markerName || city.name, city.timeZone);
+        activateCity();
+      });
+
+      // X-01: Leaflet supplies no keyboard behavior for Path layers (only
+      // L.Marker icons), so the marker path itself becomes a button-like
+      // focusable control: tabindex 0, role button, accessible name from
+      // the canonical label, and Enter/Space activation through the same
+      // activateCity path as the pointer click.
+      const markerEl = marker.getElement();
+      markerEl.setAttribute('tabindex', '0');
+      markerEl.setAttribute('role', 'button');
+      markerEl.setAttribute('aria-label', label);
+      markerEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          activateCity();
+        }
       });
 
       L.tooltip({
@@ -382,7 +409,7 @@
         offset: [0, -6],
         className: 'city-label'
       })
-        .setContent(city.markerName || city.name)
+        .setContent(label)
         .setLatLng([city.lat, city.lng])
         .addTo(cityLayer);
     });

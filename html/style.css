@@ -854,6 +854,16 @@ html, body {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
+/* City markers are keyboard-operable (X-01): the marker path is a focusable
+   button-like control. A bright stroke ring plus outline keeps the focus
+   indication visible over daylight, twilight, and night map areas. */
+.city-marker:focus-visible {
+  stroke: #ffd85c;
+  stroke-width: 4;
+  outline: 2px solid #ffd85c;
+  outline-offset: 1px;
+}
+
 @media (max-width: 480px) {
   .panel {
     top: auto;
