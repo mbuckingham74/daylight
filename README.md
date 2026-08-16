@@ -257,7 +257,7 @@ To deploy from this repo:
 ```
 
 The script:
-1. Requires a clean, committed worktree and stages `docker-compose.yml`, `nginx.conf`, and `html/` under `/home/michael/deployments/` on ForksTech
+1. Requires a clean, committed worktree, runs the mandatory Foxguard pre-deployment gate (`npx foxguard --baseline foxguard-baseline.json .`), and stages `docker-compose.yml`, `nginx.conf`, and `html/` under `/home/michael/deployments/` on ForksTech. Nothing on the server is touched unless Foxguard passes
 2. Validates the staged Compose model, installs it at `/home/michael/deployments/daylight/`, and records the exact source commit in `.deployment.json`
 3. Recreates only `daylight-static` with image pulling disabled
 

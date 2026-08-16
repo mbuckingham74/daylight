@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "fingerprint": "53c7db74a99ce16f7305f48dc23d7d8d9539c07b9ac11f6a24d9605265a309ed",
+      "rule_id": "js/no-xss-innerhtml",
+      "file": "html/app.js",
+      "line": 18
+    }
+  ]
+}
