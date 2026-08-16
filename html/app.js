@@ -52,9 +52,62 @@
   // individually so a single bad value doesn't break the whole page.
   const LEGACY_MAP_VIEW_STORAGE_KEY = 'daylight-map-view';
   const TIME_FORMAT_STORAGE_KEY = 'daylight-time-format';
-  const WORLD_OVERVIEW_ZOOM = 2;
   const DEFAULT_MAP_CENTER = [20, 0];
   clearLegacyMapView();
+
+  // ── Global framing (UI-01) ───────────────────────────────────────────
+  // The product contract concerns the unobscured visible map area, not the
+  // full Leaflet container underneath the opaque panel. On desktop the
+  // persistent control panel overlays the left edge, so the safe area is the
+  // map width to the right of the panel; on mobile the panel is a bottom
+  // sheet and the safe area is the full container width. The safe area can
+  // be up to 1.5x the world width without showing substantial duplicate
+  // geography (mirroring the "approximately one useful world" contract): a
+  // 1366×768 viewport with a 320px panel leaves a 1030px safe area, which is
+  // ~1.006x the world at zoom 2 and is acceptable. At 1920×768 the safe area
+  // is 1584px, which is ~1.547x the world at zoom 2 — beyond the headroom
+  // and substantial. The coverage zoom is therefore the smallest zoom whose
+  // world width (TILE_SIZE * 2^z) covers at least 2/3 of the safe area width
+  // (= safe area / 1.5), and using it as the map's minimum zoom floors
+  // interactive zoom-out before the multi-world state can recur. It is
+  // acceptable for the wrapped geography to exist underneath the opaque
+  // panel.
+  const TILE_SIZE = 256;
+  const MIN_OVERVIEW_ZOOM = 2;
+  const MAX_OVERVIEW_ZOOM = 12;
+  const SAFE_AREA_HEADROOM = 1.5;
+
+  function getCoverageZoomForSafeAreaWidth(safeWidth) {
+    return Math.max(
+      MIN_OVERVIEW_ZOOM,
+      Math.min(
+        MAX_OVERVIEW_ZOOM,
+        Math.ceil(Math.log2(safeWidth / TILE_SIZE / SAFE_AREA_HEADROOM))
+      )
+    );
+  }
+
+  function getSafeAreaWidth() {
+    const mapEl = document.getElementById('map');
+    const mapRect = mapEl ? mapEl.getBoundingClientRect() : { width: window.innerWidth, height: window.innerHeight, left: 0, top: 0 };
+    const containerWidth = mapRect.width;
+    const containerHeight = mapRect.height;
+    const panelEl = document.getElementById('info-panel');
+    if (!panelEl) return containerWidth;
+    const panelRect = panelEl.getBoundingClientRect();
+    const panelRight = panelRect.right - mapRect.left;
+    const panelTop = panelRect.top - mapRect.top;
+    // Mobile: the bottom-sheet panel sits in the lower half of the viewport
+    // (top: auto; bottom: 0 at ≤480px, with max-height 50% of the container
+    // height), so the safe area is the full width. Desktop: the panel is
+    // anchored top-left, so the safe area is left of the panel's right edge.
+    if (panelTop >= containerHeight / 2) return containerWidth;
+    return containerWidth - panelRight;
+  }
+
+  function getOverviewZoom() {
+    return getCoverageZoomForSafeAreaWidth(getSafeAreaWidth());
+  }
 
   const parsedPermalink = SM.parsePermalinkParams(window.location.search);
   const { time: initialTime, lat: initialLat, lng: initialLng, zoom: initialZoom, invalid: invalidUrlParams } = parsedPermalink;
@@ -66,7 +119,7 @@
     : DEFAULT_MAP_CENTER;
   const mapZoom = !isNaN(initialZoom)
     ? initialZoom
-    : WORLD_OVERVIEW_ZOOM;
+    : getOverviewZoom();
   let timeFormat = getStoredTimeFormat();
 
   // ── Time / live / pinned state (A-04) ────────────────────────────────
@@ -123,7 +176,7 @@
   const map = L.map('map', {
     center: mapCenter,
     zoom: mapZoom,
-    minZoom: 2,
+    minZoom: getOverviewZoom(),
     maxZoom: 12,
     zoomControl: true,
     worldCopyJump: true
@@ -145,6 +198,20 @@
     maxZoom: 16,
     noWrap: false
   }).addTo(map);
+
+  // UI-01: frame a fresh load around the world relative to the left control
+  // panel. On desktop the panel overlays the map's left edge, so the world is
+  // recentered into the unobstructed safe area — mobile's bottom sheet leaves
+  // the horizontal center alone and its framing is unchanged. Explicit URL
+  // view state is preserved untouched (getTargetCenterForMapPoint is defined
+  // below and hoisted).
+  if (!hasInitialCenter && isNaN(initialZoom)) {
+    map.setView(
+      getTargetCenterForMapPoint(L.latLng(DEFAULT_MAP_CENTER[0], DEFAULT_MAP_CENTER[1]), getOverviewZoom()),
+      mapZoom,
+      { animate: false }
+    );
+  }
 
   function clearLegacyMapView() {
     try {
@@ -709,9 +776,10 @@
     setFollowSun,
     centerMapOnLocation: (lat, lng) => {
       const location = L.latLng(lat, lng);
+      const overviewZoom = getOverviewZoom();
       map.setView(
-        getTargetCenterForMapPoint(location, WORLD_OVERVIEW_ZOOM),
-        WORLD_OVERVIEW_ZOOM,
+        getTargetCenterForMapPoint(location, overviewZoom),
+        overviewZoom,
         panOptions(0.8)
       );
     }
@@ -876,6 +944,8 @@
   });
 
   window.addEventListener('resize', function () {
+    const overviewZoom = getOverviewZoom();
+    if (overviewZoom !== map.getMinZoom()) map.setMinZoom(overviewZoom);
     solarDetails.invalidate();
     solarDetails.update(currentTime());
     updateSunLabelPlacement();
@@ -931,7 +1001,12 @@
   function resetMapView() {
     syncViewInUrl = false;
     setFollowSun(false);
-    map.setView(DEFAULT_MAP_CENTER, WORLD_OVERVIEW_ZOOM, panOptions(0.8));
+    const overviewZoom = getOverviewZoom();
+    map.setView(
+      getTargetCenterForMapPoint(L.latLng(DEFAULT_MAP_CENTER[0], DEFAULT_MAP_CENTER[1]), overviewZoom),
+      overviewZoom,
+      panOptions(0.8)
+    );
     urlState.updatePermalink();
   }
 
@@ -1168,6 +1243,36 @@
   if (invalidUrlParams.length > 0) {
     urlState.showUrlParamNotice(invalidUrlParams);
   }
+
+  // ── Verification handle (used by automated browser tests) ────────────
+  // Read-only access to the composition-root Leaflet state so the E2E suite
+  // can assert geographic framing (center, bounds, exposed-area geometry)
+  // through the production page, mirroring window.__daylightGlobe. Exposes
+  // no setters; it cannot change map behavior.
+  window.__daylightMap = {
+    getView: () => {
+      const center = map.getCenter();
+      return { zoom: map.getZoom(), center: { lat: center.lat, lng: center.lng } };
+    },
+    getBounds: () => {
+      const b = map.getBounds();
+      return { west: b.getWest(), east: b.getEast(), north: b.getNorth(), south: b.getSouth() };
+    },
+    getContainerSize: () => {
+      const size = map.getSize();
+      return { x: size.x, y: size.y };
+    },
+    getSafeAreaWidth: () => getSafeAreaWidth(),
+    getSafeAreaCenter: () => {
+      const p = getMapSafeAreaCenter();
+      return { x: p.x, y: p.y };
+    },
+    toContainerPoint: (lat, lng) => {
+      const p = map.latLngToContainerPoint(L.latLng(lat, lng));
+      return { x: p.x, y: p.y };
+    },
+    getMinZoom: () => map.getMinZoom()
+  };
 
   setInterval(tick, 1000);
 })();

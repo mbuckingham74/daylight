@@ -542,3 +542,197 @@ test.describe('E2E-17 — X-03 view-mode accessibility state', () => {
     await expect(page.locator('[aria-current="page"]')).toHaveCount(1);
   });
 });
+
+test.describe('E2E-18 — UI-01 global map framing', () => {
+  // Reads the production page's read-only Leaflet verification handle
+  // (window.__daylightMap) to assert geographic framing — center, bounds,
+  // unobscured safe-area width, and the coverage floor — rather than an
+  // exact zoom constant, matching the __daylightGlobe pattern in
+  // globe.spec.js.
+  const mapState = (page) =>
+    page.evaluate(() => {
+      const h = window.__daylightMap;
+      const bounds = h.getBounds();
+      return {
+        zoom: h.getView().zoom,
+        center: h.getView().center,
+        minZoom: h.getMinZoom(),
+        containerWidth: h.getContainerSize().x,
+        safeAreaWidth: h.getSafeAreaWidth(),
+        worldWidth: 256 * Math.pow(2, h.getMinZoom()),
+        containerSpan: bounds.east - bounds.west,
+        safeAreaSpan: 360 * h.getSafeAreaWidth() / (256 * Math.pow(2, h.getMinZoom()))
+      };
+    });
+
+  // The product contract concerns the unobscured visible map area, not the
+  // full Leaflet container. The safe area may be up to ~1.5x the world width
+  // before the duplicate geography becomes substantial, so the framing check
+  // is on the safe area.
+  const expectSafeAreaFraming = async (page) => {
+    const s = await mapState(page);
+    expect(s.zoom).toBe(s.minZoom);
+    // No substantial duplicate in the safe area: safe area can be at most
+    // 1.5x the world width.
+    expect(s.safeAreaWidth).toBeLessThanOrEqual(s.worldWidth * 1.5);
+    // Recognizable global overview in the safe area: at least 90° of the
+    // world visible (i.e., 25% of the globe).
+    expect(s.safeAreaSpan).toBeGreaterThan(90);
+  };
+
+  test.describe('wide desktop', () => {
+    test.use({ viewport: { width: 1920, height: 1080 } });
+
+    test('UI01-1 — fresh wide-desktop load frames a single recognizable world around the panel', async ({ page }) => {
+      await page.goto('/');
+      await expectBooted(page);
+      await expectSafeAreaFraming(page);
+      const s = await mapState(page);
+      // 1920×1080 keeps zoom 3 (safe area 1584 > 1.5× world at zoom 2).
+      expect(s.minZoom).toBe(3);
+      expect(s.zoom).toBe(3);
+
+      // Composition: the framed geographic center occupies the unobstructed
+      // area right of the persistent left control panel, not hidden behind it.
+      const c = await page.evaluate(() => {
+        const h = window.__daylightMap;
+        const p = h.toContainerPoint(20, 0);
+        const safe = h.getSafeAreaCenter();
+        return { x: p.x, safeX: safe.x, containerWidth: h.getContainerSize().x };
+      });
+      expect(c.x).toBeGreaterThan(c.containerWidth * 0.25);
+      expect(Math.abs(c.x - c.safeX)).toBeLessThan(2);
+    });
+
+    test('UI01-2 — zooming out stops at the coverage floor before the multi-world span', async ({ page }) => {
+      await page.goto('/');
+      await expectBooted(page);
+
+      // Zoom well in first over the open map (wheel), then scroll back out
+      // hard; the map must floor at its coverage zoom, never return to the
+      // duplicate-world state.
+      await page.mouse.move(1200, 540);
+      for (let i = 0; i < 6; i++) {
+        await page.mouse.wheel(0, -500);
+      }
+      await page.waitForTimeout(400);
+      const zoomedIn = await mapState(page);
+      expect(zoomedIn.zoom).toBeGreaterThan(zoomedIn.minZoom);
+
+      for (let i = 0; i < 12; i++) {
+        await page.mouse.wheel(0, 500);
+      }
+
+      await expectSafeAreaFraming(page);
+    });
+
+    test('UI01-3 — Reset View restores the new global framing', async ({ page }) => {
+      await page.goto(`/?time=${PINNED_ISO}`);
+      await expectBooted(page);
+      await expectSafeAreaFraming(page);
+      const initial = await mapState(page);
+
+      // Perturb away from the overview: wheel-zoom in over the open map,
+      // then drag the view.
+      await page.mouse.move(1400, 500);
+      for (let i = 0; i < 6; i++) {
+        await page.mouse.wheel(0, -500);
+      }
+      await page.waitForTimeout(400);
+      await page.mouse.down();
+      await page.mouse.move(800, 500, { steps: 8 });
+      await page.mouse.up();
+      await page.waitForTimeout(400);
+      const perturbed = await mapState(page);
+      expect(perturbed.zoom).toBeGreaterThan(initial.zoom);
+      expect(Math.abs(perturbed.center.lng - initial.center.lng)).toBeGreaterThan(1);
+
+      await page.locator('#reset-view-btn').click();
+
+      await expect(async () => {
+        const s = await mapState(page);
+        expect(s.zoom).toBe(s.minZoom);
+        expect(Math.abs(s.center.lat - initial.center.lat)).toBeLessThan(0.5);
+        expect(Math.abs(s.center.lng - initial.center.lng)).toBeLessThan(0.5);
+      }).toPass({ timeout: 10000 });
+      await expectSafeAreaFraming(page);
+
+      // Reset also clears the shared view params from the pinned address bar.
+      await expect(page).not.toHaveURL(/lat=|lon=|zoom=/);
+      await expect(page).toHaveURL(/time=/);
+    });
+
+    test('UI01-4 — an explicit shared map view is restored untouched', async ({ page }) => {
+      await page.goto(`/?time=${PINNED_ISO}&lat=47.6062&lon=-122.3321&zoom=4`);
+      await expectBooted(page);
+      const s = await mapState(page);
+      expect(s.zoom).toBe(4);
+      expect(s.center.lat).toBeCloseTo(47.6062, 1);
+      expect(s.center.lng).toBeCloseTo(-122.3321, 1);
+      // The explicit view is honored even though the coverage floor is lower.
+      expect(s.worldWidth).toBeGreaterThanOrEqual(s.containerWidth);
+    });
+  });
+
+  test.describe('intermediate desktop', () => {
+    test.use({ viewport: { width: 1366, height: 768 } });
+
+    test('UI01-5 — 1366 desktop keeps the safe area free of substantial duplicate', async ({ page }) => {
+      await page.goto('/');
+      await expectBooted(page);
+      const s = await mapState(page);
+      // 1366 safe area is 1030 (~1.006x world at zoom 2): zoom 2 stays.
+      expect(s.minZoom).toBe(2);
+      expect(s.zoom).toBe(2);
+      await expectSafeAreaFraming(page);
+      // Ordinary east/west wrapping preserved: the visible longitude span
+      // is bounded by the safe area, not the (wider) container.
+      expect(s.safeAreaSpan).toBeLessThan(360 * 1.5);
+    });
+  });
+
+  test.describe('small laptop', () => {
+    test.use({ viewport: { width: 1280, height: 800 } });
+
+    test('UI01-6 — 1280 laptop keeps the safe area free of substantial duplicate', async ({ page }) => {
+      await page.goto('/');
+      await expectBooted(page);
+      const s = await mapState(page);
+      // 1280 safe area is 944 (< 1024 = world at zoom 2): zoom 2 fits.
+      expect(s.minZoom).toBe(2);
+      expect(s.zoom).toBe(2);
+      await expectSafeAreaFraming(page);
+      expect(s.safeAreaSpan).toBeLessThan(360);
+    });
+  });
+
+  test.describe('mobile bottom sheet', () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test('UI01-7 — mobile keeps its existing sane framing', async ({ page }) => {
+      await page.goto('/');
+      await expectBooted(page);
+
+      await expect(async () => {
+        const s = await mapState(page);
+        expect(s.zoom).toBe(2);
+      }).toPass({ timeout: 10000 });
+      await expectSafeAreaFraming(page);
+      const s = await mapState(page);
+      expect(s.minZoom).toBe(2);
+      // The bottom sheet does not obstruct the horizontal safe area.
+      expect(s.safeAreaWidth).toBe(s.containerWidth);
+
+      // Reset View preserves the same mobile framing and clear view params.
+      await page.locator('#reset-view-btn').click();
+      await expect(async () => {
+        const r = await mapState(page);
+        expect(r.zoom).toBe(2);
+      }).toPass({ timeout: 10000 });
+      const r = await mapState(page);
+      expect(r.containerSpan).toBeGreaterThan(90);
+      expect(r.containerSpan).toBeLessThan(360);
+      await expect(page).not.toHaveURL(/lat=|lon=|zoom=/);
+    });
+  });
+});
