@@ -436,3 +436,109 @@ test.describe('E2E-16 — X-02 desktop hidden behavior', () => {
     expect(reached).toBe(false);
   });
 });
+
+test.describe('E2E-17 — X-03 view-mode accessibility state', () => {
+  // The 2D map and 3D globe are separate documents (/ and globe.html)
+  // cross-navigated by links, so inert is not applicable between views:
+  // X-03 here is truthful current-page state on the navigation links plus
+  // regression protection that hidden in-document content is never
+  // keyboard-reachable on either view.
+
+  test('X03-1 — the current 2D view is exposed truthfully on initial load', async ({ page }) => {
+    await page.goto(`/?time=${PINNED_ISO}`);
+
+    // The home link points at the current page: marked as current.
+    await expect(page.locator('#home-link')).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('#home-link')).toHaveAttribute('href', '/');
+    // The 3D destination link is an ordinary navigation link: no false state.
+    await expect(page.locator('#globe-link')).not.toHaveAttribute('aria-current', /.+/);
+    await expect(page.locator('#globe-link')).not.toHaveAttribute('aria-pressed', /.+/);
+    // Exactly one current-page claim on the 2D view — never ambiguous.
+    await expect(page.locator('[aria-current="page"]')).toHaveCount(1);
+  });
+
+  test('X03-2 — switching to the 3D view clears the 2D current-page claim', async ({ page }) => {
+    await page.goto(`/?time=${PINNED_ISO}`);
+    await page.locator('#globe-link').click();
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page).toHaveURL(/globe\.html/);
+
+    // On the globe page every link points away from the current page, so
+    // none may claim to be current.
+    await expect(page.locator('#map-link')).not.toHaveAttribute('aria-current', /.+/);
+    await expect(page.locator('#home-link')).not.toHaveAttribute('aria-current', /.+/);
+    await expect(page.locator('[aria-current="page"]')).toHaveCount(0);
+  });
+
+  test('X03-3 — keyboard activation of the view link keeps focus valid', async ({ page }) => {
+    await page.goto(`/?time=${PINNED_ISO}`);
+
+    // Real sequential Tab navigation reaches the 3D Globe link.
+    let reached = false;
+    for (let i = 0; i < 40 && !reached; i++) {
+      await page.keyboard.press('Tab');
+      reached = await page.evaluate(() =>
+        document.activeElement && document.activeElement.id === 'globe-link');
+    }
+    expect(reached).toBe(true);
+
+    await page.keyboard.press('Enter');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page).toHaveURL(/globe\.html/);
+
+    // Cross-document navigation: focus resets to the document body, never
+    // inside hidden/inactive content.
+    const focusInfo = await page.evaluate(() => ({
+      tag: document.activeElement.tagName,
+      insideHidden: !!(document.activeElement.closest && document.activeElement.closest('[hidden]'))
+    }));
+    expect(focusInfo.tag).toBe('BODY');
+    expect(focusInfo.insideHidden).toBe(false);
+  });
+
+  test('X03-4 — hidden in-document content is never keyboard reachable on either view', async ({ page }) => {
+    const walkForbidden = async (selector) => {
+      let hit = false;
+      for (let i = 0; i < 50 && !hit; i++) {
+        await page.keyboard.press('Tab');
+        hit = await page.evaluate((sel) => {
+          const el = document.activeElement;
+          return !!(el && el.closest && el.closest(sel));
+        }, selector);
+      }
+      return hit;
+    };
+
+    // 2D view: the inactive tab panel is hidden (display:none) and must
+    // never receive focus.
+    await page.goto(`/?time=${PINNED_ISO}`);
+    await page.locator('#solar-tab').click();
+    await expect(page.locator('#map-page')).toBeHidden();
+    expect(await walkForbidden('#map-page')).toBe(false);
+    await page.locator('#map-tab').click();
+    await expect(page.locator('#solar-page')).toBeHidden();
+    expect(await walkForbidden('#solar-page')).toBe(false);
+
+    // 3D view: error card and loading overlay are hidden (display:none)
+    // and must never receive focus.
+    await page.goto(`/globe.html?time=${PINNED_ISO}`);
+    await expect(page.locator('#globe-error')).toBeHidden();
+    await expect(page.locator('#globe-loading')).toBeHidden();
+    expect(await walkForbidden('#globe-error')).toBe(false);
+    expect(await walkForbidden('#globe-loading')).toBe(false);
+  });
+
+  test('X03-5 — returning to the 2D view restores the current-page state', async ({ page }) => {
+    await page.goto(`/?time=${PINNED_ISO}`);
+    await page.locator('#globe-link').click();
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page).toHaveURL(/globe\.html/);
+    await expect(page.locator('[aria-current="page"]')).toHaveCount(0);
+
+    await page.locator('#map-link').click();
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page).toHaveURL(/\/(\?.*)?$/);
+    await expect(page.locator('#home-link')).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('[aria-current="page"]')).toHaveCount(1);
+  });
+});
