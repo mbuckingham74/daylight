@@ -8,7 +8,9 @@
   const missingDeps = [];
   if (!window.SolarMath) missingDeps.push('Solar math module');
   if (!window.DaylightView) missingDeps.push('Map view module');
-  if (!window.AppScheduler) missingDeps.push('App scheduler module'); if (!window.L) missingDeps.push('Leaflet (map library)');
+  if (!window.AppScheduler) missingDeps.push('App scheduler module');
+  if (!window.SeasonYear) missingDeps.push('Season year module');
+  if (!window.L) missingDeps.push('Leaflet (map library)');
   if (!window.SunCalc) missingDeps.push('SunCalc (sunrise/sunset times)');
 
   if (missingDeps.length > 0) {
@@ -23,6 +25,7 @@
   const SM = window.SolarMath;
   const View = window.DaylightView;
   const scheduler = window.AppScheduler;
+  const { getSeasonEventYear, isWithinSupportedRange } = window.SeasonYear;
   const {
     D2R, MS_PER_DAY, TWILIGHT_THRESHOLDS,
     normalizeDegrees, wrapLng, clamp,
@@ -1459,8 +1462,8 @@
   }
 
   function getActiveYear() {
-    if (isLive || !manualTime) return new Date().getFullYear();
-    return manualTime.getFullYear();
+    if (isLive || !manualTime) return getSeasonEventYear(new Date());
+    return getSeasonEventYear(manualTime);
   }
 
   let followSun = false;
@@ -1702,8 +1705,7 @@
     } else {
       datetimeInput.value = formatDateTimeLocal(manualTime);
       const utcText = `${formatUtcDate(manualTime)} ${formatTime(manualTime)} UTC`;
-      const year = manualTime.getFullYear();
-      const outOfRange = year < 1900 || year > 2100;
+      const outOfRange = !isWithinSupportedRange(manualTime);
       datetimeUtcHint.textContent = outOfRange
         ? `${utcText} — ⚠ outside 1900–2100 accuracy range`
         : utcText;
