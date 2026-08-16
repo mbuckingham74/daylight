@@ -169,6 +169,17 @@ reference instants (typically within ~7 minutes, worst observed ~15 minutes
 in that sample — a sampled observation, not a guaranteed full-range
 maximum), and the regression bounds enforce that envelope.
 
+The sunrise/sunset times shown on the map come from SunCalc (see the
+[Tech Stack](#tech-stack)), not from the model above.
+`tests/sunrise-sunset-reference.test.js` regresses the production SunCalc
+1.9.0 path against US Naval Observatory sunrise/sunset times for twelve
+deterministic cases — Seattle, Sydney, and Singapore at the 2026 equinoxes
+and solstices — covering northern and southern mid-latitudes and the
+near-equatorial zone across the seasons. The USNO values are published to
+whole-minute precision in UTC; Daylight's SunCalc output is held within
+3 minutes of each published instant, the observed worst deviation in this
+sample (~2.3 minutes) plus the reference's ±30 s rounding.
+
 Outside the 1900–2100 range, the obliquity and eccentricity formulas accumulate larger errors. Dates far outside this range should not be relied upon for precise solar positions.
 
 The math is verified against standard solstice/equinox values:
