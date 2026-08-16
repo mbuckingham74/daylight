@@ -3,13 +3,49 @@
 A live, interactive clone of the old **daylightmap.org** — a zoomable world map that tracks sunlight, twilight, and darkness as the day progresses.
 
 [![Live Site](https://img.shields.io/badge/live-daylight.forkstech.com-blue?style=flat-square)](https://daylight.forkstech.com)
+[![CI](https://github.com/mbuckingham74/daylight/actions/workflows/ci.yml/badge.svg)](https://github.com/mbuckingham74/daylight/actions/workflows/ci.yml)
+[![Deployed commit](https://img.shields.io/badge/deployed-3d7da9a-2ea44f?style=flat-square)](https://github.com/mbuckingham74/daylight/commit/3d7da9ac3d92d1d194fe7a197004ab13a4d24151)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow?style=flat-square)](#license)
+
+## Architecture
+
+Two pages, one astronomy core. The 2D map (`index.html`) is a composition root that wires together small, individually unit-tested UMD modules; the 3D globe (`globe.html`) is an ES module that reuses the same `SolarMath` core, formatting helpers, and `?time=` permalink contract — there is no second astronomy implementation.
+
+```mermaid
+flowchart LR
+    subgraph twoD["2D Map — index.html (classic scripts, UMD modules)"]
+        root2["app.js — composition root"]
+        solar2["solar.js — SolarMath astronomy core"]
+        sched["app-scheduler.js — tick / heavy-update scheduling"]
+        view["view.js — viewport helper"]
+        season["season-year.js — UTC-year selection"]
+        cities["cities.js — 115 canonical cities"]
+        fmt2["format.js — shared formatting"]
+        url["url-state.js — permalink & share"]
+        time["time-state.js — live/pinned time model"]
+        loc["browser-location.js — geolocation controller"]
+        det["solar-details.js — Solar Details controller"]
+        root2 --- solar2 & sched & view & season & cities & fmt2 & url & time & loc & det
+        loc --- cities
+    end
+    subgraph threeD["3D Globe — globe.html (ES module)"]
+        root3["globe.js"]
+        solar3["solar.js — same core"]
+        gmath["globe-math.js — geo ↔ 3D vectors"]
+        gclouds["globe-clouds.js — cloud layer"]
+        fmt3["format.js — same helpers"]
+        root3 --- solar3 & gmath & gclouds & fmt3
+    end
+    solar2 -. "one astronomy" .- solar3
+    fmt2 -. "one formatting contract" .- fmt3
+```
 
 ## Features
 
 ### Visualization
 - **Live day/night visualization** with accurate Sun tracking
 - **3D Globe** — a photorealistic, interactive Three.js globe on its own page (`globe.html`) that renders the same `SolarMath` day/night state in real time. See [3D Globe](#3d-globe) below.
-- **State-aware update scheduler** — the clock display updates every second, but the expensive twilight tile redraw and chart rendering run every ~20 seconds in live mode. Manual interactions (slider, presets, resize, tab switch) render immediately. Work is skipped entirely while the browser tab is hidden and catches up on return.
+- **State-aware update scheduler** (`app-scheduler.js`) — the clock display updates every second, but the expensive twilight tile redraw and chart rendering run every ~20 seconds in live mode. Manual interactions (slider, presets, resize, tab switch) render immediately. Work is skipped entirely while the browser tab is hidden and catches up on return.
 - **Debounced hover feedback** — map coordinates update instantly on hover, while sunrise/sunset times and chart rebuilds are debounced ~200 ms to avoid redundant SunCalc calls during continuous mouse movement.
 - **Smooth twilight gradient** instead of a hard terminator:
   - Civil twilight (sun 0° to −6° altitude)
@@ -50,7 +86,7 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 - **Live button** — return to real-time tracking
 - **±12-hour slider** — scrubs ±12 hours around the current time-travel anchor (which is either "now" in live mode, or the selected seasonal preset event instant). The slider and presets compose: clicking a preset sets the anchor to the exact event instant, then dragging the slider scrubs around that anchor without jumping back to "now".
 - **Preset selection state** — the active solstice/equinox preset is highlighted while that seasonal event instant is shown with no slider offset.
-- **Solstice / equinox presets** — jump to the exact calculated instant of the seasonal event (not just the calendar date at an arbitrary time). Events are computed dynamically for the active time-travel year (or the current year when live), so they remain correct across year boundaries and leap years. Hover a preset button to see the exact UTC date and time of the event:
+- **Solstice / equinox presets** — jump to the exact calculated instant of the seasonal event (not just the calendar date at an arbitrary time). Events are computed dynamically for the active time-travel year (or the current year when live), so they remain correct across year boundaries and leap years. The active astronomical year is always derived from the displayed instant's **UTC** year (`season-year.js`), never the browser-local calendar year, so the event set cannot drift for viewers in timezones behind or ahead of UTC near the New Year boundary. Hover a preset button to see the exact UTC date and time of the event:
   - March equinox (e.g., 2026-03-20 14:38 UTC)
   - June solstice (e.g., 2026-06-21 08:24 UTC)
   - September equinox (e.g., 2026-09-23 00:17 UTC)
@@ -63,7 +99,7 @@ A live, interactive clone of the old **daylightmap.org** — a zoomable world ma
 ### Location
 - **Browser geolocation** — calls `navigator.geolocation.getCurrentPosition` only after an explicit click on the "Use My Location" button. Does not request location automatically on load. The button centers the map on the viewer's location at the world overview zoom and populates the local sunrise/sunset card. Explicit shared map views are preserved instead of being overridden by geolocation. Handles permission-denied / unavailable / timeout with inline feedback.
 - **Location marker** — shows the browser-reported location as a blue dot on the map. Clicking the dot copies that location into the map point card without requiring a map pan.
-- **Nearest city** — computed client-side from geolocation against a bundled list of major cities, so no external geocoding service is required.
+- **Nearest city** — computed client-side from geolocation against the same canonical dataset (`cities.js`) that powers the markers — 115 cities worldwide — so no external geocoding service is required.
 - **Map point card** — hover/click sunrise and sunset are separate from the browser-location card, so polar hover data cannot be confused with the viewer's local daylight.
 
 ### Permalink state
@@ -90,6 +126,7 @@ A separate, directly-accessible page (`globe.html`) renders a photorealistic, in
 | `html/globe.css` | Dark space-oriented styling consistent with the 2D page |
 | `html/globe.js` | ES module: scene, shaders, controls, lifecycle, failure states |
 | `html/globe-math.js` | Pure geographic ↔ 3D-vector helper (UMD, browser + Node, unit-tested) |
+| `html/globe-clouds.js` | Cloud-layer drift and texture configuration (UMD, browser + Node, unit-tested) |
 | `html/vendor/three.module.min.js` | Three.js r160 module build (vendored locally, pinned) |
 | `html/vendor/addons/controls/OrbitControls.js` | Three.js r160 OrbitControls addon (vendored, pinned) |
 | `html/assets/globe/*` | Local NASA Earth textures (see [Attribution](#attribution)) |
@@ -224,38 +261,62 @@ Longitudes are **east-positive** throughout, matching both Leaflet and SunCalc:
 ```
 .
 ├── html/
-│   ├── index.html          # Main 2D map page
-│   ├── globe.html          # 3D globe page (ES module entry, import map)
-│   ├── solar.js            # Pure solar/astronomy math (UMD module, testable in Node)
-│   ├── globe-math.js       # Pure geographic ↔ 3D vector conversion (UMD module)
-│   ├── app.js              # 2D map, UI logic (depends on solar.js)
-│   ├── view.js             # 2D viewport helper (depends on nothing)
-│   ├── globe.js            # 3D globe app (ES module, depends on solar.js + globe-math.js)
-│   ├── style.css           # 2D page styling
-│   ├── globe.css           # 3D globe page styling
-│   ├── favicon.svg         # Site icon
-│   ├── vendor/
-│   │   ├── three.module.min.js          # Three.js r160 (pinned, MIT)
-│   │   └── addons/controls/OrbitControls.js  # Three.js r160 addon (pinned, MIT)
-│   └── assets/globe/       # Local Earth textures (NASA; see Attribution)
-│       ├── day.jpg         # Blue Marble albedo (4096×2048)
-│       ├── night.png       # Black Marble city lights (4096×2048)
-│       ├── bump.jpg        # Shaded relief + bathymetry bump map (2048×1024)
-│       ├── specular.jpg    # Land/ocean specular mask (2048×1024)
-│       └── clouds.png      # Cloud cover layer (2048×1024, RGBA)
+│   ├── index.html            # Main 2D map page (loads the UMD modules below)
+│   ├── app.js                # 2D composition root: wires the modules together
+│   ├── solar.js              # Pure solar/astronomy math (UMD, Node-testable)
+│   ├── app-scheduler.js      # 1 Hz tick + heavy-update rate limiting (UMD)
+│   ├── view.js               # 2D viewport helper (UMD)
+│   ├── season-year.js        # UTC-year selection for seasonal events (UMD)
+│   ├── cities.js             # Canonical city dataset: markers + nearest-city (UMD)
+│   ├── format.js             # Shared formatting primitives (UMD)
+│   ├── url-state.js          # Permalink/share URL handling (UMD)
+│   ├── time-state.js         # Canonical live/pinned time model (UMD)
+│   ├── browser-location.js   # "Use My Location" controller (UMD)
+│   ├── solar-details.js      # Solar Details tab controller (UMD)
+│   ├── globe.html            # 3D globe page (ES module entry, import map)
+│   ├── globe.js              # 3D globe app (ES module)
+│   ├── globe-math.js         # Geographic ↔ 3D vector conversion (UMD)
+│   ├── globe-clouds.js       # Cloud-layer drift/texture config (UMD)
+│   ├── globe-watchdog.js     # Globe module-failure detection (unit-tested)
+│   ├── style.css / globe.css # Page styling
+│   ├── favicon.svg           # Site icon
+│   ├── vendor/               # Three.js r160 + OrbitControls (pinned, MIT)
+│   └── assets/globe/         # Local NASA Earth textures (see Attribution)
 ├── tests/
-│   ├── solar.test.js       # Unit tests for solar math (node:test runner)
-│   ├── globe.test.js       # Unit tests for globe-math.js (node:test runner)
-│   ├── presets.test.js     # Seasonal preset and year-boundary tests
-│   ├── view.test.js        # Viewport helper tests
-│   └── edge-cases.test.js  # Permalink/edge-case tests
-├── docker-compose.yml      # nginx static container with healthcheck
-├── nginx.conf              # nginx config: gzip, caching, security headers, CSP Report-Only
-├── deploy.sh               # One-command deploy to the VPS
-├── package.json            # Dev tooling (ESLint, tests)
-├── eslint.config.js        # ESLint 9 flat config (module override for globe.js)
-├── .github/workflows/ci.yml # GitHub Actions: lint + test on push/PR
-├── README.md               # This file
+│   ├── solar.test.js         # Solar math unit tests (node:test runner)
+│   ├── globe.test.js         # globe-math + globe-clouds unit tests
+│   ├── presets.test.js       # Seasonal preset and year-boundary tests
+│   ├── view.test.js          # Viewport helper tests
+│   ├── edge-cases.test.js    # Permalink/edge-case tests
+│   ├── url-state.test.js     # URL serialization tests
+│   ├── time-state.test.js    # Live/pinned state model tests
+│   ├── season-year.test.js   # UTC-year selection tests
+│   ├── scheduler.test.js     # Update-scheduling tests
+│   ├── format.test.js        # Formatting-contract tests
+│   ├── cities.test.js        # Canonical city dataset tests
+│   ├── city-coverage.test.js # Nearest-city geographic coverage tests
+│   ├── browser-location.test.js # Geolocation subsystem tests
+│   ├── solar-details.test.js # Solar Details panel tests
+│   ├── cloud-wrap.test.js    # Globe cloud texture wrapping tests
+│   ├── asset-versions.test.js# ?v= stamp drift tests
+│   ├── watchdog.test.js      # Globe watchdog tests
+│   ├── solar-position-reference.test.js  # USNO/JPL reference regression
+│   ├── seasons-reference.test.js         # Equinox/solstice reference regression
+│   ├── sunrise-sunset-reference.test.js  # SunCalc vs USNO regression
+│   ├── e2e/                  # Playwright browser smoke suite (2D + globe)
+│   ├── deploy.test.sh        # deploy.sh control-flow regression (mocked ssh)
+│   └── nginx-headers.test.sh # nginx.conf header/routing regression
+├── scripts/asset-versions.js # Enforce content-hashed ?v= asset stamps
+├── docker-compose.yml        # nginx static container with healthcheck
+├── nginx.conf                # gzip, caching, security headers, CSP Report-Only
+├── deploy.sh                 # One-command deploy to the VPS (Foxguard-gated)
+├── foxguard-baseline.json    # Foxguard pre-deployment gate baseline
+├── playwright.config.js      # E2E config (Chromium, local static server)
+├── package.json              # Dev tooling (ESLint, tests, E2E)
+├── eslint.config.js          # ESLint 9 flat config (module override for globe.js)
+├── .github/workflows/ci.yml  # GitHub Actions: check + E2E jobs on push/PR
+├── BACKLOG.md                # Issue/backlog tracking
+├── README.md                 # This file
 └── .gitignore
 ```
 
@@ -278,15 +339,35 @@ Then open http://localhost:8000 for the 2D map and http://localhost:8000/globe.h
 The project has no build step, but includes development-only tooling:
 
 ```bash
-npm install        # install ESLint
-npm test           # run unit tests (Node built-in test runner)
-npm run lint       # run ESLint on JS files
-npm run check      # run both lint and tests
+npm install            # install dev tooling (ESLint, Playwright)
+npm run lint           # run ESLint on JS files
+npm run check:assets   # verify every ?v= asset stamp matches file contents
+npm run update:assets  # rewrite ?v= stamps (run after changing any asset)
+npm test               # run unit tests (Node built-in test runner)
+npm run test:e2e       # run the Playwright browser smoke suite (Chromium)
+npm run check          # run lint + check:assets + tests
 ```
+
+E2E runs the real `html/` origin through a minimal local static server
+(`tests/e2e/static-server.js`) in Chromium, fetching CDN dependencies
+(Leaflet, SunCalc, tz-lookup, Esri tiles) exactly as production does — it
+exercises app wiring, DOM, geolocation, share, and dependency-failure states
+without waiting on tile traffic. Two additional regression suites are shell
+scripts run from CI, not `npm run check`:
+
+- `tests/deploy.test.sh` — runs the real `deploy.sh` against mocked
+  `ssh`/`rsync`/`docker`/`npx`, covering first/repeat deployment, staged
+  Compose validation failures, stale-staging recovery, and Foxguard gate
+  ordering (the gate must run before any remote mutation and fail closed).
+- `tests/nginx-headers.test.sh` — boots the exact pinned nginx image with
+  the real `nginx.conf` and asserts response headers and routing: security
+  headers on every caching location, true 404s for unknown routes (no SPA
+  fallback), no immutable cache on missing assets, and `/csp-report` handled
+  as a discarded POST (204) and rejected GET (405).
 
 ## Deployment
 
-The site runs as an `nginx:alpine` container on `forkstech.com` and is exposed through Nginx Proxy Manager.
+The site runs as an `nginx:alpine` container on `forkstech.com` and is exposed through Nginx Proxy Manager. The currently running production build is commit `3d7da9a`, recorded in `.deployment.json` on the host.
 
 To deploy from this repo:
 
@@ -294,22 +375,37 @@ To deploy from this repo:
 ./deploy.sh
 ```
 
+```mermaid
+flowchart TD
+    A["git push / PR merged"] --> B["GitHub Actions CI<br/>lint + asset stamps + unit + deploy/nginx regression + E2E"]
+    B --> C["deploy.sh — requires clean, committed worktree"]
+    C --> D{"Foxguard pre-deployment gate<br/>npx foxguard --baseline foxguard-baseline.json"}
+    D -- "violation or error" --> E["ABORT — no remote changes"]
+    D -- "pass" --> F["Stage docker-compose.yml, nginx.conf, html/<br/>into .daylight-stage-<commit12> on the VPS"]
+    F --> G["Validate staged Compose model<br/>verify pinned image already on host"]
+    G --> H["Atomic swap<br/>live dir → .old backup, validated stage → live"]
+    H --> I["docker compose up --force-recreate<br/>--pull never daylight-static"]
+    I --> J["Deployment metadata written<br/>to .deployment.json (commit, time, compose sha)"]
+```
+
 The script:
 1. Requires a clean, committed worktree, runs the mandatory Foxguard pre-deployment gate (`npx foxguard --baseline foxguard-baseline.json .`), and stages `docker-compose.yml`, `nginx.conf`, and `html/` under `/home/michael/deployments/` on ForksTech. Nothing on the server is touched unless Foxguard passes
-2. Validates the staged Compose model, installs it at `/home/michael/deployments/daylight/`, and records the exact source commit in `.deployment.json`
-3. Recreates only `daylight-static` with image pulling disabled
+2. Validates the staged Compose model, atomically swaps it into place at `/home/michael/deployments/daylight/` (previous deployment kept aside as a backup until the swap succeeds), and records the exact source commit in `.deployment.json`
+3. Recreates only `daylight-static` with `--force-recreate` (the atomic directory swap changes the bind-mount inode, so recreation is mandatory) and `--pull never` (the pinned image identity is never silently changed)
 
 The nginx configuration (`nginx.conf`) provides:
 - Gzip compression for CSS, JS, JSON, and SVG
 - Long-term caching for versioned assets (files with `?v=` query params), including the local globe textures (`png/jpg/jpeg/webp`)
+- Content-hashed `?v=` stamps enforced by `scripts/asset-versions.js` (`npm run check:assets` in CI), so a changed asset can never ship without its version bump
 - `no-cache` revalidation for `index.html` and `globe.html`
-- Security headers (X-Frame-Options, X-Content-Type-Options, Referrer-Policy)
-- CSP in Report-Only mode (move to enforcement after reviewing violations)
+- Security headers (X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy) re-declared on every location that sets its own `Cache-Control`, because nginx `add_header` does not inherit across such locations
+- CSP in Report-Only mode (move to enforcement after reviewing violations); reports are POSTed to `/csp-report`, which is deliberately discarded (204) with GETs rejected (405)
+- True 404s for unknown extensionless routes (no SPA fallback) and for missing asset files (never cached as immutable)
 - Container healthcheck via `wget --spider`
 
 ### CI
 
-GitHub Actions runs ESLint and unit tests on every push and pull request. See `.github/workflows/ci.yml`.
+GitHub Actions runs two jobs on every push and pull request. The **check** job runs ESLint, `check:assets`, `bash -n deploy.sh`, the `deploy.test.sh` and `nginx-headers.test.sh` regression suites, and all unit tests. The **e2e** job installs Chromium and runs the Playwright smoke suite, uploading failure artifacts from `test-results/`. See `.github/workflows/ci.yml`.
 
 ## Permalink Format
 
