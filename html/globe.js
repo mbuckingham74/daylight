@@ -64,6 +64,18 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   // City lights fade in across ~±3.5° of solar altitude around the
   // astronomical twilight threshold.
   const NIGHT_FADE_HALF_WIDTH = 0.061;
+  // Default atmosphere fill: the outer atmospheric edge should occupy this
+  // fraction of the viewport's binding (smaller) dimension. 0.93 leaves ~7%
+  // breathing room, inside the 5–10% UI-02 target. Responsive framing below
+  // clamps the resulting distance to the existing min/max range, so very
+  // narrow viewports get a wider margin rather than clipping.
+  const DEFAULT_ATMOSPHERE_FILL = 0.93;
+  // Original default camera position preserved as a directional reference so
+  // Reset Camera and the resize handler keep the same elevation/azimuth as
+  // the historical load.
+  const DEFAULT_CAMERA_Y = 0.7;
+  const DEFAULT_CAMERA_Z = 2.55;
+  const DEFAULT_CAMERA_DISTANCE = Math.hypot(DEFAULT_CAMERA_Y, DEFAULT_CAMERA_Z);
 
   const els = {
     canvas: document.getElementById('globe-canvas'),
@@ -160,7 +172,38 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   scene.background = new THREE.Color(0x03040a);
 
   const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 600);
-  camera.position.set(0, 0.7, 2.55);
+
+  // ── Default camera framing (UI-02) ───────────────────────────────────
+  // The fresh-load camera distance is derived from the camera's FOV, the
+  // current aspect ratio, and the atmosphere radius so the full atmosphere
+  // fits inside the visible canvas with ~7% breathing room regardless of
+  // viewport. The result is clamped to the existing [MIN, MAX] range so the
+  // user-facing zoom limits are unchanged; very narrow viewports simply get
+  // a wider margin instead of clipping. The directional elevation of the
+  // original default is preserved so Reset Camera and the initial framing
+  // share the same look-at angle.
+  function defaultCameraDistance(cam, atmosphereRadius) {
+    const fovRad = cam.fov * Math.PI / 180;
+    const tanV = Math.tan(fovRad / 2);
+    const tanH = tanV * cam.aspect;
+    const tanBinding = Math.min(tanV, tanH);
+    // asin(atmosphereRadius / d) = DEFAULT_ATMOSPHERE_FILL * atan(tanBinding)
+    // → d = atmosphereRadius / sin(DEFAULT_ATMOSPHERE_FILL * atan(tanBinding))
+    const bindingAngle = Math.atan(tanBinding);
+    return atmosphereRadius / Math.sin(DEFAULT_ATMOSPHERE_FILL * bindingAngle);
+  }
+
+  function clampCameraDistance(d) {
+    return Math.max(MIN_CAMERA_DISTANCE, Math.min(MAX_CAMERA_DISTANCE, d));
+  }
+
+  function applyDefaultCameraPosition(cam, distance) {
+    const d = clampCameraDistance(distance);
+    const scale = d / DEFAULT_CAMERA_DISTANCE;
+    cam.position.set(0, DEFAULT_CAMERA_Y * scale, DEFAULT_CAMERA_Z * scale);
+  }
+
+  applyDefaultCameraPosition(camera, defaultCameraDistance(camera, ATMOSPHERE_RADIUS));
 
   const controls = new OrbitControls(camera, els.canvas);
   controls.enableDamping = true;
@@ -171,7 +214,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   controls.rotateSpeed = 0.6;
   controls.zoomSpeed = 0.9;
   controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.5; // ~2 minutes per orbit — presentation only
+  // UI-02: ambient planetary motion, ~150 s per full revolution. Paired
+  // with the deltaTime-aware controls.update(dt) call in render() below so
+  // the rate is frame-rate independent.
+  controls.autoRotateSpeed = 0.4;
 
   // ── Bounded keyboard orbit/zoom (X-04) ────────────────────────────────
   // The canvas is keyboard-focusable only after initialization (tabindex is
@@ -234,11 +280,13 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
       case '=':
         e.preventDefault();
         controls.autoRotate = false;
+        userAdjustedDistance = true;
         keyboardZoom(1);
         break;
       case '-':
         e.preventDefault();
         controls.autoRotate = false;
+        userAdjustedDistance = true;
         keyboardZoom(-1);
         break;
     }
@@ -675,8 +723,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   // ── Animation loop ────────────────────────────────────────────────────
   let lastFrameTime = 0;
 
-  function render() {
-    controls.update();
+  function render(dt) {
+    // UI-02: pass dt so OrbitControls' auto-rotation is frame-rate independent.
+    controls.update(dt);
     renderer.render(scene, camera);
   }
 
@@ -697,7 +746,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     earthMaterial.uniforms.uCamPos.value.copy(camera.position);
     cloudUniforms.uCamPos.value.copy(camera.position);
 
-    render();
+    render(dt);
   }
 
   function onAllTexturesLoaded() {
@@ -750,6 +799,28 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   });
 
   // ── Resize handling ───────────────────────────────────────────────────
+  // userAdjustedDistance tracks whether the user has changed the camera
+  // distance via wheel/zoom, keyboard, or touch/pinch. Reset Camera clears
+  // it. Resize recomputes the default distance only when the user has not
+  // zoomed, so a window resize can adapt the default to the new aspect
+  // ratio without overriding a deliberate zoom-in.
+  //
+  // The wheel listener catches mouse-wheel zoom; the keyboard handlers
+  // catch +/-. For touch/pinch and any other OrbitControls-driven zoom
+  // (e.g., programmatic or future input), the OrbitControls 'change'
+  // event detects distance changes against a baseline captured at the
+  // default framing and refreshed by Reset Camera. Rotation-only gestures
+  // never change the distance, so they correctly leave the flag false.
+  let userAdjustedDistance = false;
+  let baselineDistance = camera.position.distanceTo(controls.target);
+  els.canvas.addEventListener('wheel', () => { userAdjustedDistance = true; }, { passive: true });
+  controls.addEventListener('change', () => {
+    const current = camera.position.distanceTo(controls.target);
+    if (Math.abs(current - baselineDistance) > 1e-4) {
+      userAdjustedDistance = true;
+    }
+  });
+
   function onResize() {
     const width = window.innerWidth;
     const height = window.innerHeight;
@@ -757,6 +828,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     camera.updateProjectionMatrix();
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO));
     renderer.setSize(width, height);
+    if (!userAdjustedDistance) {
+      applyDefaultCameraPosition(camera, defaultCameraDistance(camera, ATMOSPHERE_RADIUS));
+      controls.update();
+    }
   }
   window.addEventListener('resize', onResize);
 
@@ -764,10 +839,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   els.toggleClouds.addEventListener('change', () => { cloudMesh.visible = els.toggleClouds.checked; });
   els.toggleAtmosphere.addEventListener('change', () => { atmosphereMesh.visible = els.toggleAtmosphere.checked; });
   els.resetCamera.addEventListener('click', () => {
-    camera.position.set(0, 0.7, 2.55);
+    applyDefaultCameraPosition(camera, defaultCameraDistance(camera, ATMOSPHERE_RADIUS));
+    baselineDistance = camera.position.distanceTo(controls.target);
     controls.target.set(0, 0, 0);
     controls.update();
-    render();
+    render(lastFrameTime ? (performance.now() - lastFrameTime) / 1000 : 1 / 60);
+    userAdjustedDistance = false;
   });
 
   updatePanel(state.date);
@@ -804,6 +881,39 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     getRenderer: () => renderer,
     getControls: () => controls,
     getEarthMesh: () => earthMesh,
+    // UI-02: the radius used for default-camera framing decisions. Kept
+    // available to the verification handle so E2E tests can confirm the
+    // atmosphere bounds the renderer actually uses.
+    getAtmosphereRadius: () => ATMOSPHERE_RADIUS,
+    getEarthRadius: () => EARTH_RADIUS,
+    // Project a representative sample of points on a sphere of the given
+    // radius and return the axis-aligned bounding box in normalized device
+    // coordinates ([-1, 1] visible). Tests use this to assert that the full
+    // Earth/atmosphere fits inside the visible canvas with breathing room.
+    projectSphereNdcBounds: (radius) => {
+      const samples = [];
+      // Equatorial rim at 24 azimuths.
+      for (let i = 0; i < 24; i += 1) {
+        const a = (i / 24) * Math.PI * 2;
+        samples.push(new THREE.Vector3(radius * Math.cos(a), 0, radius * Math.sin(a)));
+      }
+      // Polar caps: 6 latitudes from each pole inward.
+      for (let i = 1; i <= 6; i += 1) {
+        const lat = (i / 7) * Math.PI / 2;
+        samples.push(new THREE.Vector3(0, radius * Math.sin(lat), radius * Math.cos(lat)));
+        samples.push(new THREE.Vector3(0, -radius * Math.sin(lat), radius * Math.cos(lat)));
+      }
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      const v = new THREE.Vector3();
+      for (const s of samples) {
+        v.copy(s).project(camera);
+        if (v.x < minX) minX = v.x;
+        if (v.x > maxX) maxX = v.x;
+        if (v.y < minY) minY = v.y;
+        if (v.y > maxY) maxY = v.y;
+      }
+      return { minX, minY, maxX, maxY };
+    },
     sampleCenterPixel: () => {
       const size = renderer.getSize(new THREE.Vector2());
       return samplePixel(Math.floor(size.x / 2), Math.floor(size.y / 2), Math.floor(size.x), Math.floor(size.y));
