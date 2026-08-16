@@ -88,6 +88,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     els.error.hidden = false;
     els.loading.hidden = true;
     els.liveBadge.hidden = true;
+    // X-04: a failed globe must never leave a dead canvas in the tab order,
+    // and focus must not be stranded on the non-functional surface.
+    els.canvas.tabIndex = '-1';
+    if (document.activeElement === els.canvas) {
+      els.retry.focus();
+    }
   }
 
   els.retry.addEventListener('click', () => window.location.reload());
@@ -166,9 +172,77 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   controls.zoomSpeed = 0.9;
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.5; // ~2 minutes per orbit — presentation only
-  // Keyboard orbit/zoom: the canvas is focusable (tabindex=0), so arrow keys,
-  // +/- and Page Up/Down work once the globe has keyboard focus.
-  controls.listenToKeyEvents(els.canvas);
+
+  // ── Bounded keyboard orbit/zoom (X-04) ────────────────────────────────
+  // The canvas is keyboard-focusable only after initialization (tabindex is
+  // promoted in onAllTexturesLoaded and reset on failure). Arrow keys apply
+  // a fixed 15° rotation step and +/- a fixed ~15% zoom step per keypress,
+  // mirroring drag-to-orbit and wheel-to-zoom. Steps are deterministic and
+  // independent of frame rate; the camera is written in spherical
+  // coordinates around the OrbitControls target and applied through
+  // controls.update(), so the existing distance bounds and damping stay
+  // consistent. Only handled keys prevent default — nothing global.
+  const KEYBOARD_ROTATE_STEP = Math.PI / 12; // 15° per press
+  const KEYBOARD_ZOOM_FACTOR = 0.85;
+
+  function keyboardRotate(deltaAzimuth, deltaPolar) {
+    const offset = camera.position.clone().sub(controls.target);
+    const radius = offset.length();
+    const phi = Math.min(Math.PI, Math.max(0, Math.acos(Math.min(1, Math.max(-1, offset.y / radius))) - deltaPolar));
+    const theta = Math.atan2(offset.x, offset.z) - deltaAzimuth;
+    camera.position.set(
+      radius * Math.sin(phi) * Math.sin(theta),
+      radius * Math.cos(phi),
+      radius * Math.sin(phi) * Math.cos(theta)
+    ).add(controls.target);
+    controls.update();
+  }
+
+  function keyboardZoom(direction) {
+    const offset = camera.position.clone().sub(controls.target);
+    const radius = Math.min(MAX_CAMERA_DISTANCE, Math.max(MIN_CAMERA_DISTANCE, offset.length() * Math.pow(KEYBOARD_ZOOM_FACTOR, direction)));
+    camera.position.copy(offset.normalize().multiplyScalar(radius).add(controls.target));
+    controls.update();
+  }
+
+  // Arrow keys follow the drag direction: ArrowLeft/ArrowUp move the view
+  // the same way dragging the globe left/up does. First keyboard use stops
+  // presentation auto-rotation, matching the existing first-interaction rule.
+  els.canvas.addEventListener('keydown', function (e) {
+    switch (e.key) {
+      case 'ArrowLeft':
+        e.preventDefault();
+        controls.autoRotate = false;
+        keyboardRotate(-KEYBOARD_ROTATE_STEP, 0);
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        controls.autoRotate = false;
+        keyboardRotate(KEYBOARD_ROTATE_STEP, 0);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        controls.autoRotate = false;
+        keyboardRotate(0, -KEYBOARD_ROTATE_STEP);
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        controls.autoRotate = false;
+        keyboardRotate(0, KEYBOARD_ROTATE_STEP);
+        break;
+      case '+':
+      case '=':
+        e.preventDefault();
+        controls.autoRotate = false;
+        keyboardZoom(1);
+        break;
+      case '-':
+        e.preventDefault();
+        controls.autoRotate = false;
+        keyboardZoom(-1);
+        break;
+    }
+  });
   controls.update();
 
   // Stop presentation auto-rotation on first user interaction, and respect
@@ -635,6 +709,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
     updateSolar(state.date);
     started = true;
+    // X-04: the canvas becomes a keyboard target only once the globe is
+    // actually interactive.
+    els.canvas.tabIndex = '0';
     // Successful initialization clears every loading and error state: a slow
     // but successful texture download must never leave a stale failure panel.
     els.error.hidden = true;

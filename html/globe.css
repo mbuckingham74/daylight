@@ -37,6 +37,21 @@ html, body {
   box-shadow: inset 0 0 0 2px rgba(255, 216, 92, 0.65);
 }
 
+/* Visually hidden text available to assistive technology (X-04): carries
+   the globe description and keyboard instructions for the focusable
+   canvas, which has no visible label of its own. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .panel {
   position: absolute;
   top: 16px;

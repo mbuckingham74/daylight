@@ -5,11 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Daylight Globe - Live 3D Day/Night Tracker</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg?v=e3d582d4" />
-  <link rel="stylesheet" href="globe.css?v=9673fb83" />
+  <link rel="stylesheet" href="globe.css?v=441f2ecd" />
 </head>
 <body>
-  <div id="globe-scene" aria-label="Interactive 3D Earth globe showing live sunlight and darkness"></div>
-  <canvas id="globe-canvas" tabindex="0" aria-label="3D Earth globe. Drag to orbit, scroll to zoom."></canvas>
+  <div id="globe-scene"></div>
+  <canvas id="globe-canvas" tabindex="-1" aria-label="Interactive 3D Earth globe" aria-describedby="globe-canvas-desc"></canvas>
+  <p id="globe-canvas-desc" class="sr-only">Interactive 3D Earth globe showing the current day side, twilight bands, and night side at the displayed time. Use arrow keys to rotate the globe and plus or minus keys to zoom. The Reset Camera button restores the default view.</p>
 
   <aside class="panel" id="globe-panel" aria-label="Daylight Globe controls">
     <div class="panel-handle" id="panel-handle" aria-hidden="true"><span></span></div>
@@ -105,6 +106,6 @@
   <script src="format.js?v=d52b0264"></script>
   <script src="globe-math.js?v=7a8bd92b"></script>
   <script src="globe-clouds.js?v=53803da3"></script>
-  <script type="module" src="globe.js?v=d5f1897b"></script>
+  <script type="module" src="globe.js?v=ad125a78"></script>
 </body>
 </html>
