@@ -13,6 +13,13 @@
  * this range. Subsolar longitude (which depends on GMST) is accurate to about
  * 0.01 deg. Earth-Sun distance is accurate to roughly 1e-5 AU.
  *
+ * The equinox/solstice instants inherit the same ~0.01 deg longitude
+ * envelope, i.e. typically within ~10 minutes of published instants, with a
+ * worst observed error of ~15 minutes across the sampled USNO reference
+ * years (tests/seasons-reference.test.js) — a sampled observation, not a
+ * guaranteed full-range maximum. The numerical refinement itself is exact
+ * to well under a second; the timing uncertainty is entirely model error.
+ *
  * Sources:
  *   - Meeus, *Astronomical Algorithms*, 2nd ed., chapters 25-28.
  *   - USNO Circular 179 / Explanatory Supplement to the Astronomical Almanac.
@@ -387,6 +394,12 @@
    * Compute the four seasonal events for a given year by numerically
    * refining declination zero-crossings (equinoxes) and extrema (solstices).
    * Results are cached per year.
+   *
+   * The refinement converges on the model's own zero/extremum to well under
+   * a millisecond; event-time accuracy is bounded by the low-precision solar
+   * model (~0.01° in longitude ≈ worst observed ~15 minutes vs published
+   * instants in the sampled USNO reference set — see the header comment and
+   * tests/seasons-reference.test.js).
    *
    * @param {number} year — UTC year
    * @returns {Array<{ name: string, date: Date }>} four events sorted by date

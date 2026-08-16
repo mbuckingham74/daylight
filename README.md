@@ -156,9 +156,18 @@ The algorithms are low-precision but sufficient for visualization. The supported
 | Subsolar longitude (GMST) | 1900–2100 | ±0.01° | IERS 1996 GMST |
 | Earth-Sun distance | 1900–2100 | ±1×10⁻⁵ AU | Meeus ch. 25 |
 | Equation of time | 1900–2100 | ±0.1 minutes | Meeus ch. 28 |
-| Equinox/solstice times | 1900–2100 | ±2 minutes | Numerical refinement |
+| Equinox/solstice times | 1900–2100 | typically within ~10 minutes; worst observed ~15 minutes in the sampled USNO reference set | Meeus ch. 25 (0.01° model) |
 | Sunrise/sunset (SunCalc) | 1900–2100 | ±1 minute (mid-latitudes) | SunCalc / refraction model |
 | Twilight thresholds | Any | Exact (defined by altitude angle) | Standard definitions |
+
+Seasonal-event instants are found by numerically refining the model's
+declination zero-crossings and extrema; that refinement is exact to well
+under a second, so the event-time uncertainty is the same ~0.01° envelope as
+the solar longitude itself. `tests/seasons-reference.test.js` compares all
+four events in ten years spanning 1900–2100 against US Naval Observatory
+reference instants (typically within ~7 minutes, worst observed ~15 minutes
+in that sample — a sampled observation, not a guaranteed full-range
+maximum), and the regression bounds enforce that envelope.
 
 Outside the 1900–2100 range, the obliquity and eccentricity formulas accumulate larger errors. Dates far outside this range should not be relied upon for precise solar positions.
 
