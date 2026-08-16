@@ -21,6 +21,8 @@ jobs:
 
       - run: npm run lint
 
+      - run: npm run check:assets
+
       - run: bash -n deploy.sh
 
       - run: bash tests/deploy.test.sh

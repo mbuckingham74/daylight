@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Daylight Globe - Live 3D Day/Night Tracker</title>
-  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <link rel="stylesheet" href="globe.css?v=20260804a" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=e3d582d4" />
+  <link rel="stylesheet" href="globe.css?v=9673fb83" />
 </head>
 <body>
   <div id="globe-scene" aria-label="Interactive 3D Earth globe showing live sunlight and darkness"></div>
@@ -58,7 +58,7 @@
 
   <div class="globe-loading" id="globe-loading" aria-live="polite">Loading globe&hellip;</div>
 
-  <script src="globe-watchdog.js?v=20260805a"></script>
+  <script src="globe-watchdog.js?v=7111ee0c"></script>
   <script>
     // Watchdog: a failed module import (Three.js or globe.js itself) aborts the
     // module before it can show its own failure state, so catch it here.
@@ -95,15 +95,15 @@
   <script type="importmap">
   {
     "imports": {
-      "three": "./vendor/three.module.min.js?v=20260805a",
+      "three": "./vendor/three.module.min.js?v=3e690ac7",
       "three/addons/": "./vendor/addons/",
-      "three/addons/controls/OrbitControls.js": "./vendor/addons/controls/OrbitControls.js?v=20260805a"
+      "three/addons/controls/OrbitControls.js": "./vendor/addons/controls/OrbitControls.js?v=5a44a9e8"
     }
   }
   </script>
-  <script src="solar.js?v=20260722a"></script>
-  <script src="globe-math.js?v=20260805a"></script>
-  <script src="globe-clouds.js?v=20260805a"></script>
-  <script type="module" src="globe.js?v=20260805a"></script>
+  <script src="solar.js?v=bff0395a"></script>
+  <script src="globe-math.js?v=7a8bd92b"></script>
+  <script src="globe-clouds.js?v=53803da3"></script>
+  <script type="module" src="globe.js?v=df82180b"></script>
 </body>
 </html>

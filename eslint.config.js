@@ -51,5 +51,14 @@ module.exports = [
     languageOptions: {
       sourceType: 'module'
     }
+  },
+  {
+    files: ['scripts/*.js'],
+    languageOptions: {
+      globals: {
+        __dirname: 'readonly',
+        process: 'readonly'
+      }
+    }
   }
 ];
