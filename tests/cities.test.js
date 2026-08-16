@@ -2,11 +2,13 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const DaylightCities = require('../html/cities.js');
 
-// ── Frozen pre-A-02 characterization ─────────────────────────────────
-// These lists were captured from the two duplicated datasets before
-// consolidation: the marker array in html/app.js and the nearest-city
-// array in html/browser-location.js. They freeze the exact effective
-// membership, order, and metadata that A-02 must preserve.
+// ── Frozen characterization ───────────────────────────────────────────
+// The marker lists were captured from the pre-A-02 duplicated datasets
+// (html/app.js marker array, html/browser-location.js nearest-city array);
+// they freeze the exact marker membership/order/metadata that A-02
+// preserved. LOCATION_NAMES additionally includes the 39 location-only
+// cities added by the bounded coverage expansion (appended in canonical
+// order after the original 75).
 
 const MARKER_LABELS = ["London", "New York", "Tokyo", "Sydney", "São Paulo", "Cairo", "Mumbai", "Singapore", "Los Angeles", "Paris", "Moscow", "Beijing", "Johannesburg", "Dubai", "Bangkok"];
 
@@ -14,7 +16,7 @@ const MARKER_LATLNG = [[51.5074, -0.1278], [40.7128, -74.006], [35.6762, 139.650
 
 const MARKER_TZ = ["Europe/London", "America/New_York", "Asia/Tokyo", "Australia/Sydney", "America/Sao_Paulo", "Africa/Cairo", "Asia/Kolkata", "Asia/Singapore", "America/Los_Angeles", "Europe/Paris", "Europe/Moscow", "Asia/Shanghai", "Africa/Johannesburg", "Asia/Dubai", "Asia/Bangkok"];
 
-const LOCATION_NAMES = ["Seattle, WA USA", "Portland, OR USA", "Vancouver, BC Canada", "San Francisco, CA USA", "Los Angeles, CA USA", "San Diego, CA USA", "Las Vegas, NV USA", "Phoenix, AZ USA", "Salt Lake City, UT USA", "Denver, CO USA", "Dallas, TX USA", "Austin, TX USA", "Houston, TX USA", "Kansas City, MO USA", "Minneapolis, MN USA", "Chicago, IL USA", "Detroit, MI USA", "St. Louis, MO USA", "Nashville, TN USA", "Atlanta, GA USA", "Charlotte, NC USA", "Washington, DC USA", "Philadelphia, PA USA", "New York, NY USA", "Boston, MA USA", "Miami, FL USA", "Toronto, ON Canada", "Montreal, QC Canada", "Mexico City, Mexico", "Bogota, Colombia", "Lima, Peru", "Santiago, Chile", "Buenos Aires, Argentina", "Sao Paulo, Brazil", "Rio de Janeiro, Brazil", "London, UK", "Dublin, Ireland", "Paris, France", "Madrid, Spain", "Lisbon, Portugal", "Amsterdam, Netherlands", "Brussels, Belgium", "Berlin, Germany", "Zurich, Switzerland", "Vienna, Austria", "Rome, Italy", "Prague, Czechia", "Warsaw, Poland", "Stockholm, Sweden", "Oslo, Norway", "Helsinki, Finland", "Moscow, Russia", "Istanbul, Turkey", "Cairo, Egypt", "Lagos, Nigeria", "Nairobi, Kenya", "Johannesburg, South Africa", "Dubai, UAE", "Riyadh, Saudi Arabia", "Delhi, India", "Mumbai, India", "Bengaluru, India", "Bangkok, Thailand", "Singapore", "Kuala Lumpur, Malaysia", "Jakarta, Indonesia", "Hong Kong", "Shanghai, China", "Beijing, China", "Seoul, South Korea", "Tokyo, Japan", "Manila, Philippines", "Sydney, Australia", "Melbourne, Australia", "Auckland, New Zealand"];
+const LOCATION_NAMES = ["Seattle, WA USA", "Portland, OR USA", "Vancouver, BC Canada", "San Francisco, CA USA", "Los Angeles, CA USA", "San Diego, CA USA", "Las Vegas, NV USA", "Phoenix, AZ USA", "Salt Lake City, UT USA", "Denver, CO USA", "Dallas, TX USA", "Austin, TX USA", "Houston, TX USA", "Kansas City, MO USA", "Minneapolis, MN USA", "Chicago, IL USA", "Detroit, MI USA", "St. Louis, MO USA", "Nashville, TN USA", "Atlanta, GA USA", "Charlotte, NC USA", "Washington, DC USA", "Philadelphia, PA USA", "New York, NY USA", "Boston, MA USA", "Miami, FL USA", "Toronto, ON Canada", "Montreal, QC Canada", "Mexico City, Mexico", "Bogota, Colombia", "Lima, Peru", "Santiago, Chile", "Buenos Aires, Argentina", "Sao Paulo, Brazil", "Rio de Janeiro, Brazil", "London, UK", "Dublin, Ireland", "Paris, France", "Madrid, Spain", "Lisbon, Portugal", "Amsterdam, Netherlands", "Brussels, Belgium", "Berlin, Germany", "Zurich, Switzerland", "Vienna, Austria", "Rome, Italy", "Prague, Czechia", "Warsaw, Poland", "Stockholm, Sweden", "Oslo, Norway", "Helsinki, Finland", "Moscow, Russia", "Istanbul, Turkey", "Cairo, Egypt", "Lagos, Nigeria", "Nairobi, Kenya", "Johannesburg, South Africa", "Dubai, UAE", "Riyadh, Saudi Arabia", "Delhi, India", "Mumbai, India", "Bengaluru, India", "Bangkok, Thailand", "Singapore", "Kuala Lumpur, Malaysia", "Jakarta, Indonesia", "Hong Kong", "Shanghai, China", "Beijing, China", "Seoul, South Korea", "Tokyo, Japan", "Manila, Philippines", "Sydney, Australia", "Melbourne, Australia", "Auckland, New Zealand", "Forks, WA USA", "Bellingham, WA USA", "Spokane, WA USA", "Olympia, WA USA", "Astoria, OR USA", "Eugene, OR USA", "Bend, OR USA", "Medford, OR USA", "Redding, CA USA", "Eureka, CA USA", "Sacramento, CA USA", "San Jose, CA USA", "Fresno, CA USA", "Boise, ID USA", "Missoula, MT USA", "Billings, MT USA", "Cheyenne, WY USA", "Casper, WY USA", "Grand Junction, CO USA", "Reno, NV USA", "St. George, UT USA", "Flagstaff, AZ USA", "Tucson, AZ USA", "Albuquerque, NM USA", "Santa Fe, NM USA", "El Paso, TX USA", "Amarillo, TX USA", "Oklahoma City, OK USA", "Omaha, NE USA", "Anchorage, AK USA", "Fairbanks, AK USA", "Juneau, AK USA", "Honolulu, HI USA", "Kelowna, BC Canada", "Prince George, BC Canada", "Calgary, AB Canada", "Edmonton, AB Canada", "Saskatoon, SK Canada", "Winnipeg, MB Canada", "Port Angeles, WA USA", "Pullman, WA USA"];
 
 const normName = name => name.split(',')[0].trim().toLowerCase()
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -45,13 +47,23 @@ describe('cities — canonical uniqueness', () => {
 
 describe('cities — coverage counts (accidental add/remove guard)', () => {
   test('total counts are frozen', () => {
-    assert.equal(DaylightCities.all.length, 75);
+    assert.equal(DaylightCities.all.length, 116);
     assert.equal(DaylightCities.markerCities.length, 15);
-    assert.equal(DaylightCities.locationCities.length, 75);
+    assert.equal(DaylightCities.locationCities.length, 116);
     const overlap = DaylightCities.markerCities.filter(m =>
       DaylightCities.locationCities.includes(m)
     );
     assert.equal(overlap.length, 15);
+  });
+
+  test('the 99 location-only cities stay non-marker with no marker metadata', () => {
+    const nonMarkers = DaylightCities.all.filter(c => !c.showMarker);
+    assert.equal(nonMarkers.length, 101);
+    for (const city of nonMarkers) {
+      assert.equal(city.markerName, undefined, `${city.name} must not carry markerName`);
+      assert.equal(city.markerOrder, undefined, `${city.name} must not carry markerOrder`);
+      assert.equal(city.timeZone, undefined, `${city.name} must not carry timeZone`);
+    }
   });
 
   test('every marker city also participates in nearest-city lookup', () => {

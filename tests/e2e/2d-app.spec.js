@@ -160,6 +160,23 @@ test.describe('E2E-07 — geolocation success path', () => {
   });
 });
 
+test.describe('E2E-14 — Forks geolocation resolves to Forks', () => {
+  test.use({ geolocation: { latitude: 47.9503, longitude: -124.3856 }, permissions: ['geolocation'] });
+
+  test('Use My Location labels the Olympic Peninsula reference as Forks', async ({ page }) => {
+    await page.goto(`/?time=${PINNED_ISO}`);
+    await expectBooted(page);
+
+    await page.locator('#my-location-btn').click();
+    await expect(page.locator('#browser-location-details')).toBeVisible();
+    await expect(page.locator('#browser-nearest-city')).toHaveText('Forks, WA USA');
+    await expect(page.locator('#browser-location-status')).toContainText(
+      'Using your browser-reported location near Forks'
+    );
+    await expect(page.locator('.loading-error')).toHaveCount(0);
+  });
+});
+
 test.describe('E2E-08 — geolocation denial path', () => {
   test('denied geolocation shows inline feedback and stays usable', async ({ page }) => {
     await page.goto(`/?time=${PINNED_ISO}`);
