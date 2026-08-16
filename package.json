@@ -9,9 +9,12 @@
     "lint": "eslint html/app.js html/app-scheduler.js html/solar.js html/view.js html/globe.js html/globe-math.js html/globe-clouds.js html/globe-watchdog.js html/season-year.js tests/ scripts/",
     "check:assets": "node scripts/asset-versions.js --check",
     "update:assets": "node scripts/asset-versions.js --write",
-    "check": "npm run lint && npm run check:assets && npm run test"
+    "check": "npm run lint && npm run check:assets && npm run test",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "eslint": "^9.0.0"
   },
   "license": "MIT"

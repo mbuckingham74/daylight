@@ -60,5 +60,17 @@ module.exports = [
         process: 'readonly'
       }
     }
+  },
+  {
+    files: ['tests/e2e/*.js'],
+    languageOptions: {
+      globals: {
+        __dirname: 'readonly',
+        process: 'readonly',
+        require: 'readonly',
+        module: 'readonly',
+        URL: 'readonly'
+      }
+    }
   }
 ];

@@ -19,3 +19,8 @@ node_modules/
 # Temporary files
 tmp/
 temp/
+
+# Playwright artifacts (retained on failure only, never committed)
+test-results/
+playwright-report/
+blob-report/
