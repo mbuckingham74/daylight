@@ -38,6 +38,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
   const SM = window.SolarMath;
   const GM = window.GlobeMath;
+  const GC = window.GlobeClouds;
 
   // ── Constants ─────────────────────────────────────────────────────────
   const ASSET_VERSION = '20260804a';
@@ -56,7 +57,6 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   const MAX_CAMERA_DISTANCE = 7;
   const SOLAR_UPDATE_MS = 1000;
   const MAX_PIXEL_RATIO = 2;
-  const CLOUD_DRIFT_PER_SECOND = 0.00005; // ~0.06°/s of longitude — subtle
   // Smoothing half-width in sin(altitude) units (~0.7°). Applied symmetrically
   // around every threshold so band positions remain exact.
   const BAND_SMOOTHNESS = 0.012;
@@ -94,10 +94,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   // ── Dependency and WebGL checks ───────────────────────────────────────
   // (Three.js load failure is caught by the watchdog in globe.html, because
   // a failed module import prevents this script from running at all.)
-  if (!SM || !GM) {
+  if (!SM || !GM || !GC) {
     showFailure(
       'The 3D globe could not be started.',
-      'A required script (solar.js or globe-math.js) did not load. Check the browser console, then try again.'
+      'A required script (solar.js, globe-math.js, or globe-clouds.js) did not load. Check the browser console, then try again.'
     );
     return;
   }
@@ -212,6 +212,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
       (texture) => {
         texture.colorSpace = colorSpace;
         texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+        // The cloud shader samples longitude at uv.x + uDrift, which grows
+        // past one texture width as the page runs. Without horizontal repeat
+        // wrapping, ClampToEdge clamps an ever-wider longitude band to the
+        // texture's right-edge column (D-01); RepeatWrapping keeps sampling
+        // periodic across the antimeridian.
+        if (key === 'clouds') GC.configureCloudTexture(texture, THREE.RepeatWrapping);
         textures[key] = texture;
         texturesPending -= 1;
         if (texturesPending === 0 && !textureLoadFailed) onAllTexturesLoaded();
@@ -606,7 +612,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     const dt = Math.min(0.1, (timestamp - lastFrameTime) / 1000);
     lastFrameTime = timestamp;
 
-    cloudUniforms.uDrift.value += CLOUD_DRIFT_PER_SECOND * dt;
+    // uDrift is kept modulo one texture width: the GPU uniform is float32,
+    // so an unbounded accumulator would lose precision and eventually freeze
+    // the drift; wrapping is visually identical under RepeatWrapping.
+    cloudUniforms.uDrift.value = GC.wrapDrift(
+      cloudUniforms.uDrift.value + GC.CLOUD_DRIFT_PER_SECOND * dt
+    );
 
     earthMaterial.uniforms.uCamPos.value.copy(camera.position);
     cloudUniforms.uCamPos.value.copy(camera.position);
