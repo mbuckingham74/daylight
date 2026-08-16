@@ -10,6 +10,9 @@
   if (!window.DaylightView) missingDeps.push('Map view module');
   if (!window.AppScheduler) missingDeps.push('App scheduler module');
   if (!window.SeasonYear) missingDeps.push('Season year module');
+  if (!window.BrowserLocation) missingDeps.push('Browser location module');
+  if (!window.SolarDetails) missingDeps.push('Solar details module');
+  if (!window.UrlState) missingDeps.push('URL state module');
   if (!window.L) missingDeps.push('Leaflet (map library)');
   if (!window.SunCalc) missingDeps.push('SunCalc (sunrise/sunset times)');
 
@@ -25,6 +28,9 @@
   const SM = window.SolarMath;
   const View = window.DaylightView;
   const scheduler = window.AppScheduler;
+  const BrowserLocation = window.BrowserLocation;
+  const SolarDetails = window.SolarDetails;
+  const UrlState = window.UrlState;
   const { getSeasonEventYear, isWithinSupportedRange } = window.SeasonYear;
   const {
     D2R, MS_PER_DAY, TWILIGHT_THRESHOLDS,
@@ -117,27 +123,10 @@
     return smGetDayLengthSeconds(date, lat, lng, SunCalc);
   }
 
-  function getTwilightDurations(date, lat, lng) {
-    const times = SunCalc.getTimes(date, lat, lng);
-    const diffSeconds = (later, earlier) => {
-      if (!isValidDate(later) || !isValidDate(earlier) || later <= earlier) return 0;
-      return (later - earlier) / 1000;
-    };
-    const civil = diffSeconds(times.sunrise, times.dawn) + diffSeconds(times.dusk, times.sunset);
-    const nautical = diffSeconds(times.dawn, times.nauticalDawn) + diffSeconds(times.nauticalDusk, times.dusk);
-    const astronomical = diffSeconds(times.nauticalDawn, times.nightEnd) + diffSeconds(times.night, times.nauticalDusk);
-
-    return {
-      civil,
-      nautical,
-      astronomical,
-      hasTransitions: civil + nautical + astronomical > 0
-    };
-  }
-
   function getSolarDetailsTarget() {
     if (activeMapPoint) return activeMapPoint;
-    if (browserLocation) return browserLocation;
+    const location = browserLocationController.getLocation();
+    if (location) return location;
 
     const center = map.getCenter();
     const lat = clamp(center.lat, -85, 85);
@@ -324,84 +313,6 @@
     { name: 'Bangkok', lat: 13.7563, lng: 100.5018, tz: 'Asia/Bangkok' }
   ];
 
-  const browserLocationCities = [
-    { name: 'Seattle, WA USA', lat: 47.6062, lng: -122.3321 },
-    { name: 'Portland, OR USA', lat: 45.5152, lng: -122.6784 },
-    { name: 'Vancouver, BC Canada', lat: 49.2827, lng: -123.1207 },
-    { name: 'San Francisco, CA USA', lat: 37.7749, lng: -122.4194 },
-    { name: 'Los Angeles, CA USA', lat: 34.0522, lng: -118.2437 },
-    { name: 'San Diego, CA USA', lat: 32.7157, lng: -117.1611 },
-    { name: 'Las Vegas, NV USA', lat: 36.1699, lng: -115.1398 },
-    { name: 'Phoenix, AZ USA', lat: 33.4484, lng: -112.0740 },
-    { name: 'Salt Lake City, UT USA', lat: 40.7608, lng: -111.8910 },
-    { name: 'Denver, CO USA', lat: 39.7392, lng: -104.9903 },
-    { name: 'Dallas, TX USA', lat: 32.7767, lng: -96.7970 },
-    { name: 'Austin, TX USA', lat: 30.2672, lng: -97.7431 },
-    { name: 'Houston, TX USA', lat: 29.7604, lng: -95.3698 },
-    { name: 'Kansas City, MO USA', lat: 39.0997, lng: -94.5786 },
-    { name: 'Minneapolis, MN USA', lat: 44.9778, lng: -93.2650 },
-    { name: 'Chicago, IL USA', lat: 41.8781, lng: -87.6298 },
-    { name: 'Detroit, MI USA', lat: 42.3314, lng: -83.0458 },
-    { name: 'St. Louis, MO USA', lat: 38.6270, lng: -90.1994 },
-    { name: 'Nashville, TN USA', lat: 36.1627, lng: -86.7816 },
-    { name: 'Atlanta, GA USA', lat: 33.7490, lng: -84.3880 },
-    { name: 'Charlotte, NC USA', lat: 35.2271, lng: -80.8431 },
-    { name: 'Washington, DC USA', lat: 38.9072, lng: -77.0369 },
-    { name: 'Philadelphia, PA USA', lat: 39.9526, lng: -75.1652 },
-    { name: 'New York, NY USA', lat: 40.7128, lng: -74.0060 },
-    { name: 'Boston, MA USA', lat: 42.3601, lng: -71.0589 },
-    { name: 'Miami, FL USA', lat: 25.7617, lng: -80.1918 },
-    { name: 'Toronto, ON Canada', lat: 43.6532, lng: -79.3832 },
-    { name: 'Montreal, QC Canada', lat: 45.5017, lng: -73.5673 },
-    { name: 'Mexico City, Mexico', lat: 19.4326, lng: -99.1332 },
-    { name: 'Bogota, Colombia', lat: 4.7110, lng: -74.0721 },
-    { name: 'Lima, Peru', lat: -12.0464, lng: -77.0428 },
-    { name: 'Santiago, Chile', lat: -33.4489, lng: -70.6693 },
-    { name: 'Buenos Aires, Argentina', lat: -34.6037, lng: -58.3816 },
-    { name: 'Sao Paulo, Brazil', lat: -23.5505, lng: -46.6333 },
-    { name: 'Rio de Janeiro, Brazil', lat: -22.9068, lng: -43.1729 },
-    { name: 'London, UK', lat: 51.5074, lng: -0.1278 },
-    { name: 'Dublin, Ireland', lat: 53.3498, lng: -6.2603 },
-    { name: 'Paris, France', lat: 48.8566, lng: 2.3522 },
-    { name: 'Madrid, Spain', lat: 40.4168, lng: -3.7038 },
-    { name: 'Lisbon, Portugal', lat: 38.7223, lng: -9.1393 },
-    { name: 'Amsterdam, Netherlands', lat: 52.3676, lng: 4.9041 },
-    { name: 'Brussels, Belgium', lat: 50.8503, lng: 4.3517 },
-    { name: 'Berlin, Germany', lat: 52.5200, lng: 13.4050 },
-    { name: 'Zurich, Switzerland', lat: 47.3769, lng: 8.5417 },
-    { name: 'Vienna, Austria', lat: 48.2082, lng: 16.3738 },
-    { name: 'Rome, Italy', lat: 41.9028, lng: 12.4964 },
-    { name: 'Prague, Czechia', lat: 50.0755, lng: 14.4378 },
-    { name: 'Warsaw, Poland', lat: 52.2297, lng: 21.0122 },
-    { name: 'Stockholm, Sweden', lat: 59.3293, lng: 18.0686 },
-    { name: 'Oslo, Norway', lat: 59.9139, lng: 10.7522 },
-    { name: 'Helsinki, Finland', lat: 60.1699, lng: 24.9384 },
-    { name: 'Moscow, Russia', lat: 55.7558, lng: 37.6173 },
-    { name: 'Istanbul, Turkey', lat: 41.0082, lng: 28.9784 },
-    { name: 'Cairo, Egypt', lat: 30.0444, lng: 31.2357 },
-    { name: 'Lagos, Nigeria', lat: 6.5244, lng: 3.3792 },
-    { name: 'Nairobi, Kenya', lat: -1.2921, lng: 36.8219 },
-    { name: 'Johannesburg, South Africa', lat: -26.2041, lng: 28.0473 },
-    { name: 'Dubai, UAE', lat: 25.2048, lng: 55.2708 },
-    { name: 'Riyadh, Saudi Arabia', lat: 24.7136, lng: 46.6753 },
-    { name: 'Delhi, India', lat: 28.6139, lng: 77.2090 },
-    { name: 'Mumbai, India', lat: 19.0760, lng: 72.8777 },
-    { name: 'Bengaluru, India', lat: 12.9716, lng: 77.5946 },
-    { name: 'Bangkok, Thailand', lat: 13.7563, lng: 100.5018 },
-    { name: 'Singapore', lat: 1.3521, lng: 103.8198 },
-    { name: 'Kuala Lumpur, Malaysia', lat: 3.1390, lng: 101.6869 },
-    { name: 'Jakarta, Indonesia', lat: -6.2088, lng: 106.8456 },
-    { name: 'Hong Kong', lat: 22.3193, lng: 114.1694 },
-    { name: 'Shanghai, China', lat: 31.2304, lng: 121.4737 },
-    { name: 'Beijing, China', lat: 39.9042, lng: 116.4074 },
-    { name: 'Seoul, South Korea', lat: 37.5665, lng: 126.9780 },
-    { name: 'Tokyo, Japan', lat: 35.6762, lng: 139.6503 },
-    { name: 'Manila, Philippines', lat: 14.5995, lng: 120.9842 },
-    { name: 'Sydney, Australia', lat: -33.8688, lng: 151.2093 },
-    { name: 'Melbourne, Australia', lat: -37.8136, lng: 144.9631 },
-    { name: 'Auckland, New Zealand', lat: -36.8509, lng: 174.7645 }
-  ];
-
   let cityLayer = L.layerGroup().addTo(map);
 
   function renderCities() {
@@ -568,12 +479,6 @@
     return `${value.toFixed(decimals)}°`;
   }
 
-  function getCompassDirection(degrees) {
-    if (!isFinite(degrees)) return '';
-    const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-    return directions[Math.round(normalizeDegrees(degrees) / 45) % directions.length];
-  }
-
   function formatSignedDegrees(value, decimals = 2) {
     if (!isFinite(value)) return '--';
     const sign = value > 0 ? '+' : value < 0 ? '-' : '';
@@ -673,357 +578,26 @@
     return 'New Moon';
   }
 
-  let lastChartSignature = '';
-
-  function updateSolarDetails(date) {
-    const solarPage = document.getElementById('solar-page');
-    if (!solarPage || solarPage.hidden) return;
-
-    const sun = getSunEquatorial(date);
-    const subsolar = getSubsolarPoint(date);
-    const antisolar = { lat: -subsolar.lat, lng: wrapLng(subsolar.lng + 180) };
-    const orbit = getSolarOrbitStats(date);
-    const target = getSolarDetailsTarget();
-    const position = getSolarPosition(date, target.lat, target.lng);
-    const dayLength = getDayLengthSeconds(date, target.lat, target.lng);
-    const yesterdayLength = getDayLengthSeconds(new Date(date.getTime() - MS_PER_DAY), target.lat, target.lng);
-    const tomorrowLength = getDayLengthSeconds(new Date(date.getTime() + MS_PER_DAY), target.lat, target.lng);
-    const twilight = getTwilightDurations(date, target.lat, target.lng);
-    const nextSeason = getNextSeasonEvent(date);
-    const globalLight = getGlobalLightFractions();
-    const shadowMultiplier = position.altitude > 0 ? 1 / Math.tan(position.altitude * D2R) : null;
-    const noonAltitude = 90 - Math.abs(target.lat - sun.delta);
-    const dailyChangeText = `${orbit.dailyChangeKm >= 0 ? '+' : '-'}${Math.abs(orbit.dailyChangeKm / 1000).toFixed(0)}k km/day`;
-
-    setStatValue('solar-distance-au', `${orbit.distanceAu.toFixed(6)} AU`);
-    setStatValue('solar-distance-km', `${formatMillions(orbit.distanceKm)} km / ${formatMillions(orbit.distanceMiles)} mi`);
-    setStatValue('solar-light-time', formatLightTime(orbit.lightSeconds));
-    setStatValue('solar-orbital-speed', `${orbit.orbitalSpeed.toFixed(2)} km/s`);
-    setStatValue('solar-apparent-size', `${formatDegrees(orbit.apparentDiameterDeg, 3)} / ${(orbit.apparentDiameterDeg * 60).toFixed(2)}'`);
-    setStatValue('solar-energy', `${(orbit.energyRatio * 100).toFixed(2)}% / ${Math.round(orbit.solarConstant)} W/m2`);
-    document.getElementById('solar-distance-trend').textContent = `${orbit.trend} (${dailyChangeText})`;
-
-    setStatValue('earth-axial-tilt', formatDegrees(sun.obliquity, 4));
-    setStatValue('solar-declination', formatSignedDegrees(sun.delta, 3));
-    setStatValue('solar-right-ascension', formatRightAscension(sun.alpha));
-    setStatValue('solar-gmst', formatSiderealTime(sun.gmstDeg));
-    setStatValue('equation-of-time', formatSignedDuration(getEquationOfTimeMinutes(date) * 60));
-    setStatValue('antisolar-point', formatCoord(antisolar.lat, antisolar.lng));
-    document.getElementById('next-season-event').textContent = formatSeasonCountdown(nextSeason, date);
-
-    document.getElementById('detail-target-label').textContent = target.label || 'Selected point';
-    setStatValue('detail-target-coords', formatCoord(target.lat, target.lng));
-    setStatValue('local-sun-altitude', formatSignedDegrees(position.altitude, 2));
-    setStatValue('local-sun-azimuth', `${formatDegrees(position.azimuth, 1)} ${getCompassDirection(position.azimuth)}`);
-    setStatValue('local-sun-zenith', formatDegrees(position.zenith, 2));
-    setStatValue('local-shadow-length', shadowMultiplier ? `${shadowMultiplier >= 99 ? '>99' : shadowMultiplier.toFixed(shadowMultiplier >= 10 ? 0 : 1)}x` : 'No direct Sun');
-    setLightStats('local-light-state', 'local-daylight-remaining', date, target.lat, target.lng);
-    setStatValue('local-noon-altitude', formatSignedDegrees(noonAltitude, 2));
-    setStatValue('local-detail-daylength', formatDuration(dayLength));
-    setStatValue('local-daylength-change', formatSignedDuration((tomorrowLength - yesterdayLength) / 2));
-    setStatValue('local-civil-twilight', twilight.hasTransitions ? formatDuration(twilight.civil) : 'No transitions');
-    setStatValue('local-deep-twilight', twilight.hasTransitions
-      ? `${formatDuration(twilight.nautical)} + ${formatDuration(twilight.astronomical)}`
-      : 'No transitions');
-
-    setGlobalLightRow('global-daylight', 'global-daylight-bar', globalLight.daylight);
-    setGlobalLightRow('global-civil', 'global-civil-bar', globalLight.civil);
-    setGlobalLightRow('global-nautical', 'global-nautical-bar', globalLight.nautical);
-    setGlobalLightRow('global-astro', 'global-astro-bar', globalLight.astronomical);
-    setGlobalLightRow('global-night', 'global-night-bar', globalLight.night);
-    document.getElementById('global-lit-summary').textContent = `Sun up or twilight ${formatPercent(1 - globalLight.night)}`;
-
-    drawSolarCharts(date, target);
-  }
-
-  function setGlobalLightRow(valueId, barId, fraction) {
-    setStatValue(valueId, formatPercent(fraction));
-    document.getElementById(barId).style.width = formatPercent(fraction, 3);
-  }
-
-  function drawSolarCharts(date, target) {
-    const solarPage = document.getElementById('solar-page');
-    const panelWidth = Math.round(solarPage.getBoundingClientRect().width);
-    const signature = [
-      date.getUTCFullYear(),
-      date.getUTCMonth(),
-      date.getUTCDate(),
-      date.getUTCHours(),
-      date.getUTCMinutes(),
-      target.lat.toFixed(2),
-      target.lng.toFixed(2),
-      target.label || '',
-      panelWidth
-    ].join('|');
-
-    if (signature === lastChartSignature) return;
-    lastChartSignature = signature;
-
-    drawSolarYearChart(date);
-    drawAnalemmaChart(date);
-    drawDayLengthChart(date, target);
-  }
-
-  function setupCanvas(id) {
-    const canvas = document.getElementById(id);
-    if (!canvas) return null;
-
-    const rect = canvas.getBoundingClientRect();
-    const width = Math.floor(rect.width);
-    const height = Math.floor(rect.height);
-    if (width < 40 || height < 40) return null;
-
-    const ratio = window.devicePixelRatio || 1;
-    const targetWidth = Math.round(width * ratio);
-    const targetHeight = Math.round(height * ratio);
-    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-    }
-
-    const ctx = canvas.getContext('2d');
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    ctx.clearRect(0, 0, width, height);
-    return { ctx, width, height };
-  }
-
-  function drawChartGrid(ctx, width, height, padding) {
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.lineWidth = 1;
-    for (let i = 0; i <= 4; i++) {
-      const y = padding.top + (height - padding.top - padding.bottom) * i / 4;
-      ctx.beginPath();
-      ctx.moveTo(padding.left, y);
-      ctx.lineTo(width - padding.right, y);
-      ctx.stroke();
-    }
-    for (let i = 0; i <= 4; i++) {
-      const x = padding.left + (width - padding.left - padding.right) * i / 4;
-      ctx.beginPath();
-      ctx.moveTo(x, padding.top);
-      ctx.lineTo(x, height - padding.bottom);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  function plotLine(ctx, points, color, lineWidth = 2) {
-    if (points.length < 2) return;
-    ctx.save();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = lineWidth;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    points.forEach((point, index) => {
-      if (index === 0) ctx.moveTo(point.x, point.y);
-      else ctx.lineTo(point.x, point.y);
-    });
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function plotCurrentMarker(ctx, x, y, color) {
-    ctx.save();
-    ctx.fillStyle = color;
-    ctx.strokeStyle = '#101525';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(x, y, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawLegend(ctx, entries, x, y) {
-    ctx.save();
-    ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.textBaseline = 'middle';
-    let cursor = x;
-    entries.forEach(entry => {
-      ctx.fillStyle = entry.color;
-      ctx.fillRect(cursor, y - 3, 10, 6);
-      cursor += 14;
-      ctx.fillStyle = '#cbd1df';
-      ctx.fillText(entry.label, cursor, y);
-      cursor += ctx.measureText(entry.label).width + 12;
-    });
-    ctx.restore();
-  }
-
-  function mapRange(value, inMin, inMax, outMin, outMax) {
-    const t = (value - inMin) / (inMax - inMin);
-    return outMin + clamp(t, 0, 1) * (outMax - outMin);
-  }
-
-  function getYearStartAtCurrentClock(date) {
-    return Date.UTC(
-      date.getUTCFullYear(),
-      0,
-      1,
-      date.getUTCHours(),
-      date.getUTCMinutes(),
-      date.getUTCSeconds(),
-      date.getUTCMilliseconds()
-    );
-  }
-
-  function getDayOfYear(date) {
-    const start = Date.UTC(date.getUTCFullYear(), 0, 1);
-    const today = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-    return Math.floor((today - start) / MS_PER_DAY);
-  }
-
-  function getYearDayCount(year) {
-    return new Date(Date.UTC(year, 1, 29)).getUTCMonth() === 1 ? 366 : 365;
-  }
-
-  function getYearSampleDates(date) {
-    const year = date.getUTCFullYear();
-    const dayCount = getYearDayCount(year);
-    const start = getYearStartAtCurrentClock(date);
-    return Array.from({ length: dayCount }, (_, index) => new Date(start + index * MS_PER_DAY));
-  }
-
-  function drawSolarYearChart(date) {
-    const state = setupCanvas('solar-year-chart');
-    if (!state) return;
-
-    const { ctx, width, height } = state;
-    const padding = { left: 36, right: 12, top: 16, bottom: 20 };
-    const dates = getYearSampleDates(date);
-    const plotWidth = width - padding.left - padding.right;
-    const plotHeight = height - padding.top - padding.bottom;
-    const maxIndex = dates.length - 1;
-    const declinationPoints = [];
-    const distancePoints = [];
-
-    drawChartGrid(ctx, width, height, padding);
-
-    dates.forEach((sampleDate, index) => {
-      const x = padding.left + plotWidth * index / maxIndex;
-      const declination = getSunEquatorial(sampleDate).delta;
-      const distanceAu = getEarthSunDistanceAu(sampleDate);
-      declinationPoints.push({
-        x,
-        y: mapRange(declination, -24, 24, padding.top + plotHeight, padding.top)
-      });
-      distancePoints.push({
-        x,
-        y: mapRange(distanceAu, 0.983, 1.017, padding.top + plotHeight, padding.top)
-      });
-    });
-
-    plotLine(ctx, declinationPoints, '#ffd85c', 2.2);
-    plotLine(ctx, distancePoints, '#63d8ff', 1.8);
-    const currentIndex = clamp(getDayOfYear(date), 0, maxIndex);
-    const currentX = padding.left + plotWidth * currentIndex / maxIndex;
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.32)';
-    ctx.setLineDash([3, 4]);
-    ctx.beginPath();
-    ctx.moveTo(currentX, padding.top);
-    ctx.lineTo(currentX, height - padding.bottom);
-    ctx.stroke();
-    ctx.restore();
-    plotCurrentMarker(ctx, declinationPoints[currentIndex].x, declinationPoints[currentIndex].y, '#ffd85c');
-    drawLegend(ctx, [
-      { label: 'declination', color: '#ffd85c' },
-      { label: 'distance', color: '#63d8ff' }
-    ], padding.left, height - 8);
-
-    const currentDelta = getSunEquatorial(date).delta;
-    const currentDist = getEarthSunDistanceAu(date);
-    const descEl = document.getElementById('solar-year-chart-desc');
-    if (descEl) {
-      descEl.textContent = `Declination and distance curves for ${date.getUTCFullYear()}. Current declination: ${formatSignedDegrees(currentDelta, 3)}. Earth-Sun distance: ${currentDist.toFixed(5)} AU. Day ${getDayOfYear(date) + 1} of ${dates.length}.`;
-    }
-  }
-
-  function drawAnalemmaChart(date) {
-    const state = setupCanvas('analemma-chart');
-    if (!state) return;
-
-    const { ctx, width, height } = state;
-    const padding = { left: 34, right: 16, top: 16, bottom: 18 };
-    const dates = getYearSampleDates(date);
-    const plotWidth = width - padding.left - padding.right;
-    const plotHeight = height - padding.top - padding.bottom;
-    const points = dates.map(sampleDate => {
-      const eot = getEquationOfTimeMinutes(sampleDate);
-      const declination = getSunEquatorial(sampleDate).delta;
-      return {
-        x: mapRange(eot, -16, 16, padding.left, padding.left + plotWidth),
-        y: mapRange(declination, -24, 24, padding.top + plotHeight, padding.top)
-      };
-    });
-    const currentPoint = {
-      x: mapRange(getEquationOfTimeMinutes(date), -16, 16, padding.left, padding.left + plotWidth),
-      y: mapRange(getSunEquatorial(date).delta, -24, 24, padding.top + plotHeight, padding.top)
-    };
-
-    drawChartGrid(ctx, width, height, padding);
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
-    ctx.beginPath();
-    ctx.moveTo(mapRange(0, -16, 16, padding.left, padding.left + plotWidth), padding.top);
-    ctx.lineTo(mapRange(0, -16, 16, padding.left, padding.left + plotWidth), height - padding.bottom);
-    ctx.moveTo(padding.left, mapRange(0, -24, 24, padding.top + plotHeight, padding.top));
-    ctx.lineTo(width - padding.right, mapRange(0, -24, 24, padding.top + plotHeight, padding.top));
-    ctx.stroke();
-    ctx.restore();
-    plotLine(ctx, points, '#ffd85c', 2);
-    plotCurrentMarker(ctx, currentPoint.x, currentPoint.y, '#63d8ff');
-    document.getElementById('analemma-clock-label').textContent = formatChartClock(date);
-
-    const currentEot = getEquationOfTimeMinutes(date);
-    const currentDecl = getSunEquatorial(date).delta;
-    const descEl = document.getElementById('analemma-chart-desc');
-    if (descEl) {
-      descEl.textContent = `Analemma for ${formatChartClock(date)}. Equation of time: ${currentEot >= 0 ? '+' : ''}${currentEot.toFixed(1)} minutes. Solar declination: ${formatSignedDegrees(currentDecl, 3)}.`;
-    }
-  }
-
-  function drawDayLengthChart(date, target) {
-    const state = setupCanvas('daylength-chart');
-    if (!state) return;
-
-    const { ctx, width, height } = state;
-    const padding = { left: 34, right: 12, top: 16, bottom: 18 };
-    const dates = getYearSampleDates(date);
-    const plotWidth = width - padding.left - padding.right;
-    const plotHeight = height - padding.top - padding.bottom;
-    const maxIndex = dates.length - 1;
-    const points = dates.map((sampleDate, index) => {
-      const hours = getDayLengthSeconds(sampleDate, target.lat, target.lng) / 3600;
-      return {
-        x: padding.left + plotWidth * index / maxIndex,
-        y: mapRange(hours, 0, 24, padding.top + plotHeight, padding.top)
-      };
-    });
-    const currentIndex = clamp(getDayOfYear(date), 0, maxIndex);
-
-    drawChartGrid(ctx, width, height, padding);
-    plotLine(ctx, points, '#7ee3a6', 2.2);
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.32)';
-    ctx.setLineDash([3, 4]);
-    ctx.beginPath();
-    ctx.moveTo(points[currentIndex].x, padding.top);
-    ctx.lineTo(points[currentIndex].x, height - padding.bottom);
-    ctx.stroke();
-    ctx.restore();
-    plotCurrentMarker(ctx, points[currentIndex].x, points[currentIndex].y, '#7ee3a6');
-    document.getElementById('daylength-chart-label').textContent = target.label || 'Selected point';
-
-    const currentHours = getDayLengthSeconds(date, target.lat, target.lng) / 3600;
-    const descEl = document.getElementById('daylength-chart-desc');
-    if (descEl) {
-      descEl.textContent = `Day length curve for ${target.label || 'selected point'} (${formatCoord(target.lat, target.lng)}). Current day length: ${formatDuration(currentHours * 3600)}. Day ${getDayOfYear(date) + 1} of ${dates.length}.`;
-    }
-  }
-
+  const solarDetails = SolarDetails.create({
+    getEl: id => document.getElementById(id),
+    sun: {
+      getSunEquatorial, getSubsolarPoint, getSolarOrbitStats, getSolarPosition,
+      getNextSeasonEvent, getGlobalLightFractions, getEquationOfTimeMinutes,
+      getEarthSunDistanceAu, wrapLng, D2R, MS_PER_DAY, clamp, isValidDate
+    },
+    sunCalc: SunCalc,
+    getDayLengthSeconds,
+    format: {
+      formatMillions, formatLightTime, formatDegrees, formatSignedDegrees,
+      formatRightAscension, formatSiderealTime, formatSignedDuration,
+      formatCoord, formatDuration, formatPercent, formatSeasonCountdown,
+      formatChartClock
+    },
+    setStatValue,
+    setLightStats,
+    getTarget: getSolarDetailsTarget,
+    getDevicePixelRatio: () => window.devicePixelRatio || 1
+  });
   // ── Reduced motion support ──────────────────────────────────────────
   const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
   function prefersReducedMotion() {
@@ -1065,8 +639,8 @@
     const moonIllum = SunCalc.getMoonIllumination(date);
     document.getElementById('moon-phase').textContent = getMoonPhaseName(moonIllum.phase);
     refreshMapPointReadout(date);
-    updateBrowserLocalSunReadout(date);
-    updateSolarDetails(date);
+    browserLocationController.refreshSunReadout(date);
+    solarDetails.update(date);
 
     lastHeavyUpdateMs = Date.now();
   }
@@ -1093,7 +667,7 @@
     clearTimeout(hoverDebounceTimer);
     hoverDebounceTimer = setTimeout(() => {
       refreshMapPointReadout();
-      updateSolarDetails(currentTime());
+      solarDetails.update(currentTime());
       hoverDebounceTimer = null;
     }, HOVER_DEBOUNCE_MS);
   }
@@ -1104,7 +678,7 @@
     const normalizedLng = (((lng + 180) % 360 + 360) % 360) - 180;
     activeMapPoint = { lat, lng: normalizedLng, label, timeZone: timeZone || lookupTimeZone(lat, normalizedLng) };
     refreshMapPointReadout();
-    updateSolarDetails(currentTime());
+    solarDetails.update(currentTime());
   }
 
   function refreshMapPointReadout(date = currentTime()) {
@@ -1143,252 +717,33 @@
     }
   }
 
-  let browserLocation = null;
-  let browserLocationMarker = null;
-
-  function getBrowserTimeZone() {
-    try {
-      return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
-    } catch (e) {
-      return null;
+  const browserLocationController = BrowserLocation.create({
+    getEl: id => document.getElementById(id),
+    map,
+    L,
+    view: View,
+    sun: {
+      getSolarSinAltitude, TWILIGHT_THRESHOLDS, isValidDate, MS_PER_DAY
+    },
+    sunCalc: SunCalc,
+    format: {
+      formatTimeTz, formatSignedDuration, formatDuration, formatPolarDayLength
+    },
+    setLightStats,
+    getTimeZoneAbbr,
+    getDayLengthSeconds,
+    getCurrentTime: currentTime,
+    showLocationTimes,
+    setFollowSun,
+    centerMapOnLocation: (lat, lng) => {
+      const location = L.latLng(lat, lng);
+      map.setView(
+        getTargetCenterForMapPoint(location, WORLD_OVERVIEW_ZOOM),
+        WORLD_OVERVIEW_ZOOM,
+        panOptions(0.8)
+      );
     }
-  }
-
-  function getDistanceKm(aLat, aLng, bLat, bLng) {
-    const earthRadiusKm = 6371;
-    const dLat = (bLat - aLat) * D2R;
-    const dLng = (bLng - aLng) * D2R;
-    const lat1 = aLat * D2R;
-    const lat2 = bLat * D2R;
-    const h = Math.sin(dLat / 2) ** 2
-      + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-    return 2 * earthRadiusKm * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-  }
-
-  function findNearestBrowserCity(lat, lng) {
-    return browserLocationCities.reduce((nearest, city) => {
-      const distance = getDistanceKm(lat, lng, city.lat, city.lng);
-      if (!nearest || distance < nearest.distance) {
-        return { ...city, distance };
-      }
-      return nearest;
-    }, null);
-  }
-
-  function updateBrowserTimezoneReadout() {
-    const timeZone = getBrowserTimeZone();
-    document.getElementById('browser-timezone').textContent = timeZone || 'Unavailable';
-    return timeZone;
-  }
-
-  function updateBrowserNearestCityReadout(lat, lng) {
-    const nearestCity = findNearestBrowserCity(lat, lng);
-    document.getElementById('browser-nearest-city').textContent = nearestCity ? nearestCity.name : 'Unavailable';
-    return nearestCity;
-  }
-
-  function resetBrowserLocalSunReadout() {
-    document.getElementById('browser-sunrise').textContent = '--';
-    document.getElementById('browser-sunset').textContent = '--';
-    document.getElementById('browser-light-state').textContent = '--';
-    document.getElementById('browser-daylight-remaining').textContent = '--';
-    document.getElementById('browser-daylength').textContent = '--';
-    document.getElementById('browser-daylength-change').textContent = '--';
-  }
-
-  function updateBrowserLocalSunReadout(date = currentTime()) {
-    if (!browserLocation) {
-      resetBrowserLocalSunReadout();
-      return;
-    }
-
-    const times = SunCalc.getTimes(date, browserLocation.lat, browserLocation.lng);
-    const hasSunTimes = isValidDate(times.sunrise) && isValidDate(times.sunset) && times.sunset > times.sunrise;
-    const tzSuffix = browserLocation.timeZone ? ' ' + getTimeZoneAbbr(browserLocation.timeZone, date) : ' UTC';
-
-    const yesterdayLen = getDayLengthSeconds(new Date(date.getTime() - MS_PER_DAY), browserLocation.lat, browserLocation.lng);
-    const tomorrowLen = getDayLengthSeconds(new Date(date.getTime() + MS_PER_DAY), browserLocation.lat, browserLocation.lng);
-    document.getElementById('browser-daylength-change').textContent = formatSignedDuration((tomorrowLen - yesterdayLen) / 2);
-
-    if (hasSunTimes) {
-      document.getElementById('browser-sunrise').textContent = formatTimeTz(times.sunrise, browserLocation.timeZone) + tzSuffix;
-      document.getElementById('browser-sunset').textContent = formatTimeTz(times.sunset, browserLocation.timeZone) + tzSuffix;
-      setLightStats('browser-light-state', 'browser-daylight-remaining', date, browserLocation.lat, browserLocation.lng);
-      document.getElementById('browser-daylength').textContent = formatDuration((times.sunset - times.sunrise) / 1000);
-      return;
-    }
-
-    const isDaylight = getSolarSinAltitude(date, browserLocation.lat, browserLocation.lng) >= TWILIGHT_THRESHOLDS.daylight;
-    document.getElementById('browser-sunrise').textContent = 'No sunrise';
-    document.getElementById('browser-sunset').textContent = 'No sunset';
-    setLightStats('browser-light-state', 'browser-daylight-remaining', date, browserLocation.lat, browserLocation.lng);
-    document.getElementById('browser-daylength').textContent = formatPolarDayLength(isDaylight);
-  }
-
-  function setBrowserLocationStatus(status) {
-    document.getElementById('browser-location-status').textContent = status;
-  }
-
-  function setBrowserLocationDetailsVisible(visible) {
-    const details = document.getElementById('browser-location-details');
-    const card = document.getElementById('browser-location-info');
-    const button = document.getElementById('my-location-btn');
-    details.hidden = !visible;
-    card.classList.toggle('has-location', visible);
-    button.setAttribute('aria-expanded', visible ? 'true' : 'false');
-  }
-
-  function clearBrowserLocationReadout() {
-    browserLocation = null;
-    document.getElementById('browser-nearest-city').textContent = '--';
-    clearBrowserLocationMarker();
-    resetBrowserLocalSunReadout();
-    setBrowserLocationDetailsVisible(false);
-  }
-
-  function getLocationButtonLabel() {
-    return browserLocation ? 'Update My Location' : 'Use My Location';
-  }
-
-  function clearBrowserLocationMarker() {
-    if (!browserLocationMarker) return;
-    map.removeLayer(browserLocationMarker);
-    browserLocationMarker = null;
-  }
-
-  function updateBrowserLocationMarker(lat, lng, label) {
-    const displayLng = View.getNearestWorldLongitude(lng, map.getCenter().lng);
-    const latlng = [lat, displayLng];
-
-    if (!browserLocationMarker) {
-      browserLocationMarker = L.circleMarker(latlng, {
-        radius: 8,
-        fillColor: '#2f8cff',
-        color: '#ffffff',
-        weight: 2,
-        opacity: 0.95,
-        fillOpacity: 0.95,
-        interactive: true
-      }).addTo(map);
-
-      browserLocationMarker.on('click', function (e) {
-        L.DomEvent.stopPropagation(e);
-        if (!browserLocation) return;
-        setFollowSun(false);
-        showLocationTimes(
-          browserLocation.lat,
-          browserLocation.lng,
-          browserLocation.label,
-          browserLocation.timeZone
-        );
-      });
-    } else {
-      browserLocationMarker.setLatLng(latlng);
-    }
-
-    browserLocationMarker.bindTooltip(label, {
-      direction: 'top',
-      offset: [0, -10],
-      className: 'city-label'
-    });
-    browserLocationMarker.bringToFront();
-  }
-
-  function centerMapOnBrowserLocation(lat, lng) {
-    setFollowSun(false);
-    const location = L.latLng(lat, lng);
-    map.setView(
-      getTargetCenterForMapPoint(location, WORLD_OVERVIEW_ZOOM),
-      WORLD_OVERVIEW_ZOOM,
-      panOptions(0.8)
-    );
-  }
-
-  function requestBrowserLocation(options = {}) {
-    const { centerOnLocation = false, showTimes = false, updateButton = false } = options;
-    const myLocationBtn = document.getElementById('my-location-btn');
-
-    if (!navigator.geolocation) {
-      clearBrowserLocationReadout();
-      setBrowserLocationStatus('Geolocation is not supported by this browser.');
-      if (updateButton) {
-        myLocationBtn.disabled = true;
-        myLocationBtn.textContent = 'Unsupported';
-      }
-      return;
-    }
-
-    setBrowserLocationStatus('Requesting your current location...');
-
-    if (updateButton) {
-      myLocationBtn.disabled = true;
-      myLocationBtn.textContent = 'Locating...';
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      function (pos) {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        const tz = updateBrowserTimezoneReadout();
-        const nearestCity = updateBrowserNearestCityReadout(lat, lng);
-        browserLocation = {
-          lat,
-          lng,
-          timeZone: tz,
-          label: nearestCity ? nearestCity.name : 'Your location'
-        };
-        updateBrowserLocationMarker(lat, lng, browserLocation.label);
-        updateBrowserLocalSunReadout();
-        setBrowserLocationDetailsVisible(true);
-        setBrowserLocationStatus(`Using your browser-reported location near ${browserLocation.label}.`);
-
-        if (updateButton) {
-          myLocationBtn.disabled = false;
-          myLocationBtn.textContent = getLocationButtonLabel();
-        }
-
-        if (centerOnLocation) {
-          centerMapOnBrowserLocation(lat, lng);
-        }
-
-        if (showTimes) {
-          showLocationTimes(lat, lng, browserLocation.label, tz);
-        }
-      },
-      function (err) {
-        const messages = {
-          1: 'Permission denied',
-          2: 'Location unavailable',
-          3: 'Request timed out'
-        };
-        const message = messages[err.code] || 'Location error';
-        clearBrowserLocationReadout();
-        setBrowserLocationStatus(`${message}. You can update the site's location permission and try again.`);
-
-        if (updateButton) {
-          myLocationBtn.disabled = false;
-          myLocationBtn.textContent = message;
-          setTimeout(() => { myLocationBtn.textContent = getLocationButtonLabel(); }, 2500);
-        }
-      },
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
-    );
-  }
-
-  function initializeBrowserLocationReadout() {
-    updateBrowserTimezoneReadout();
-    clearBrowserLocationReadout();
-
-    if (!navigator.geolocation) {
-      setBrowserLocationStatus('Geolocation is not supported by this browser.');
-      const button = document.getElementById('my-location-btn');
-      button.disabled = true;
-      button.textContent = 'Unsupported';
-    } else {
-      setBrowserLocationStatus('See sunrise, sunset, and daylight for your current location.');
-    }
-  }
-
+  });
   let lastHover = null;
   map.on('mousemove', function (e) {
     if (e.latlng && (!lastHover || e.latlng.distanceTo(lastHover) > 50000)) {
@@ -1407,9 +762,9 @@
   // "Use My Location" — browser geolocation. Times display in the browser's
   // local timezone, which is correct because the user is physically there.
   const myLocationBtn = document.getElementById('my-location-btn');
-  initializeBrowserLocationReadout();
+  browserLocationController.initialize();
   myLocationBtn.addEventListener('click', function () {
-    requestBrowserLocation({ centerOnLocation: true, showTimes: true, updateButton: true });
+    browserLocationController.request({ centerOnLocation: true, showTimes: true, updateButton: true });
   });
 
   // UI controls
@@ -1494,8 +849,8 @@
     infoPanel.classList.toggle('details-active', pageId === 'solar-page');
 
     if (pageId === 'solar-page') {
-      lastChartSignature = '';
-      updateSolarDetails(currentTime());
+      solarDetails.invalidate();
+      solarDetails.update(currentTime());
     }
   }
 
@@ -1549,7 +904,7 @@
     timeFormat = format;
     saveTimeFormat(format);
     updateTimeFormatButtons();
-    lastChartSignature = '';
+    solarDetails.invalidate();
     update(currentTime());
     updateSliderLabel();
   }
@@ -1561,8 +916,8 @@
   });
 
   window.addEventListener('resize', function () {
-    lastChartSignature = '';
-    updateSolarDetails(currentTime());
+    solarDetails.invalidate();
+    solarDetails.update(currentTime());
     updateSunLabelPlacement();
     if (followSun) centerMapOnSun(0.3);
   });
@@ -1581,7 +936,7 @@
   }
 
   function formatLocalDateTime(date) {
-    const timeZone = getBrowserTimeZone();
+    const timeZone = BrowserLocation.getBrowserTimeZone();
     const timeZoneLabel = getTimeZoneLabel(timeZone, date);
     const options = {
       year: 'numeric',
@@ -1626,7 +981,7 @@
     syncViewInUrl = false;
     setFollowSun(false);
     map.setView(DEFAULT_MAP_CENTER, WORLD_OVERVIEW_ZOOM, panOptions(0.8));
-    updatePermalink();
+    urlState.updatePermalink();
   }
 
   centerSunBtn.addEventListener('click', function () {
@@ -1727,7 +1082,7 @@
     updateDateTimeInput();
     updatePresetSelection();
     update(currentTime());
-    updatePermalink();
+    urlState.updatePermalink();
   });
 
   let sliderRaf = null;
@@ -1743,7 +1098,7 @@
     updateSliderLabel();
     updateDateTimeInput();
     updatePresetSelection();
-    updatePermalink();
+    urlState.updatePermalink();
     if (sliderRaf) cancelAnimationFrame(sliderRaf);
     sliderRaf = requestAnimationFrame(() => {
       update(currentTime());
@@ -1762,7 +1117,7 @@
     updatePresetSelection();
     update(currentTime());
     liveBtn.classList.add('active');
-    updatePermalink();
+    urlState.updatePermalink();
   });
 
   presetBtns.forEach(btn => {
@@ -1780,125 +1135,32 @@
         updateDateTimeInput();
         updatePresetSelection();
         update(currentTime());
-        updatePermalink();
+        urlState.updatePermalink();
       }
     });
   });
 
-  // Keep the root route deterministic. Only explicit shared map views keep
-  // their camera state in the URL; ordinary browsing is session-only.
-  let permalinkDebounce;
-  function updatePermalink() {
-    clearTimeout(permalinkDebounce);
-    permalinkDebounce = setTimeout(() => {
-      const params = new URLSearchParams();
-      const time = currentTime();
-      if (!isLive) {
-        params.set('time', time.toISOString());
-      }
-
-      if (syncViewInUrl) {
-        const center = map.getCenter();
-        params.set('lat', center.lat.toFixed(4));
-        params.set('lon', wrapLng(center.lng).toFixed(4));
-        params.set('zoom', map.getZoom());
-      }
-
-      const query = params.toString();
-      const newUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
-      window.history.replaceState(null, '', newUrl);
-    }, 300);
-  }
-
-  map.on('moveend', updatePermalink);
-  map.on('zoomend', updatePermalink);
-  map.on('move zoom resize', updateSunLabelPlacement);
-
-  // ── Share / Copy Link ───────────────────────────────────────────────
-  // Generate a canonical share URL that always includes the current time,
-  // view, and zoom — unlike the address bar, which omits view params on a
-  // clean-root session. Never includes browser geolocation unless the user
-  // explicitly shared a URL that contained it.
-  function buildShareUrl() {
-    const params = new URLSearchParams();
-    const time = currentTime();
-    if (!isLive) {
-      params.set('time', time.toISOString());
-    }
-    const center = map.getCenter();
-    params.set('lat', center.lat.toFixed(4));
-    params.set('lon', wrapLng(center.lng).toFixed(4));
-    params.set('zoom', map.getZoom());
-    return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
-  }
-
-  function showShareFeedback(message) {
-    const shareBtn = document.getElementById('share-btn');
-    const originalText = shareBtn.textContent;
-    shareBtn.textContent = message;
-    shareBtn.disabled = true;
-    setTimeout(() => {
-      shareBtn.textContent = originalText;
-      shareBtn.disabled = false;
-    }, 2000);
-  }
-
-  const shareBtn = document.getElementById('share-btn');
-  shareBtn.addEventListener('click', function () {
-    const url = buildShareUrl();
-
-    if (navigator.share) {
-      navigator.share({
-        title: 'Daylight Map',
-        text: 'Day and night regions across the planet',
-        url: url
-      }).then(() => {
-        showShareFeedback('Shared');
-      }).catch(() => {});
-      return;
-    }
-
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(() => {
-        showShareFeedback('Copied!');
-      }).catch(() => {
-        fallbackCopyToClipboard(url);
-      });
-      return;
-    }
-
-    fallbackCopyToClipboard(url);
+  // ── Permalink, history, and Share / Copy Link ───────────────────────
+  // URL serialization lives in url-state.js; this is the wiring point.
+  const urlState = UrlState.create({
+    getEl: id => document.getElementById(id),
+    getTime: currentTime,
+    isLive: () => isLive,
+    getView: () => ({
+      lat: map.getCenter().lat,
+      lng: map.getCenter().lng,
+      zoom: map.getZoom()
+    }),
+    getSyncView: () => syncViewInUrl,
+    history: window.history,
+    location: window.location,
+    wrapLng
   });
+  urlState.initShare();
 
-  function fallbackCopyToClipboard(text) {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.setAttribute('readonly', '');
-    textarea.style.position = 'absolute';
-    textarea.style.left = '-9999px';
-    document.body.appendChild(textarea);
-    textarea.select();
-    try {
-      document.execCommand('copy');
-      showShareFeedback('Copied!');
-    } catch (e) {
-      showShareFeedback('Copy failed');
-    }
-    document.body.removeChild(textarea);
-  }
-
-  function showUrlParamNotice(params) {
-    const notice = document.createElement('div');
-    notice.className = 'url-notice';
-    notice.setAttribute('role', 'alert');
-    notice.textContent = `Ignoring invalid URL parameter${params.length > 1 ? 's' : ''}: ${params.join(', ')}. Using default values.`;
-    document.body.appendChild(notice);
-    setTimeout(() => {
-      notice.classList.add('url-notice--fade');
-      setTimeout(() => notice.remove(), 500);
-    }, 6000);
-  }
-
+  map.on('moveend', urlState.updatePermalink);
+  map.on('zoomend', urlState.updatePermalink);
+  map.on('move zoom resize', updateSunLabelPlacement);
   function tick() {
     if (document.hidden) return;
 
@@ -1959,7 +1221,7 @@
   followSunCheckbox.checked = followSun;
 
   if (invalidUrlParams.length > 0) {
-    showUrlParamNotice(invalidUrlParams);
+    urlState.showUrlParamNotice(invalidUrlParams);
   }
 
   setInterval(tick, 1000);
