@@ -9,12 +9,23 @@
 # re-declared for themselves.
 #
 # This test launches the exact pinned nginx image from docker-compose.yml
-# with the real nginx.conf and asserts actual HTTP response headers:
-#   scenario 1: HTML responses keep security headers + "no-cache" (no immutable)
-#   scenario 2: JS assets keep security headers + one-year immutable cache
-#   scenario 3: CSS assets keep security headers + one-year immutable cache
-#   scenario 4: SVG/PNG image assets keep security headers + immutable cache
-#   scenario 5: `nginx -t` passes with the pinned image and current config
+# with the real nginx.conf and asserts actual HTTP response headers and
+# routing status codes:
+#   scenario 1: GET / serves the map page (200, no-cache, security headers)
+#   scenario 2: GET /index.html and /globe.html succeed
+#   scenario 3: unknown extensionless routes are true 404s (no SPA fallback)
+#   scenario 4: nested unknown routes are true 404s
+#   scenario 5: missing asset-looking files are 404s without immutable cache
+#   scenario 6: POST /csp-report is deliberately discarded with 204
+#   scenario 7: GET /csp-report is rejected with 405
+#   scenario 8: D-06 header/cache assertions on HTML, JS, CSS, SVG/PNG
+#   scenario 9: `nginx -t` passes with the pinned image and current config
+#
+# D-07 regressions covered: the old `try_files $uri $uri/ /index.html`
+# fallback soft-404ed unknown routes with HTTP 200 index pages, and the CSP
+# report-uri had no deliberate handler. 404s and /csp-report responses must
+# keep the inherited security headers (D-06) and never carry an immutable
+# cache directive.
 #
 # A static drift guard (which runs without Docker) additionally asserts the
 # canonical security-header set is declared in all four add_header scopes:
@@ -58,7 +69,7 @@ CONTAINER="daylight-nginx-headers-test"
 cleanup() { docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
-echo "== Scenario 5: nginx -t with pinned image ${IMAGE}"
+echo "== Scenario 9: nginx -t with pinned image ${IMAGE}"
 docker run --rm \
   -v "${HTML_DIR}:/usr/share/nginx/html:ro" \
   -v "${NGINX_CONF}:/etc/nginx/conf.d/default.conf:ro" \
@@ -140,25 +151,102 @@ check_immutable_asset_response() { # response-text
   check_security_headers_in "${h}"
 }
 
-echo "== Scenario 1: HTML responses"
-for url in "${HTML_URLS[@]}"; do
+assert_no_cache_header_in() { # response-text
+  local h="$1"
+  local n
+  n="$(printf '%s\n' "${h}" | grep -ic '^Cache-Control:' || true)"
+  [[ "${n}" -eq 0 ]] || fail "expected no Cache-Control header, found ${n}"
+  printf '%s\n' "${h}" | grep -qi 'immutable' \
+    && fail "response must not advertise an immutable cache policy" || true
+}
+
+assert_code() { # expected-status actual-status label
+  local expected="$1" code="$2" label="$3"
+  [[ "${code}" == "${expected}" ]] || fail "${label}: expected HTTP ${expected}, got ${code}"
+}
+
+# D-07 routing: URLs that must produce true 404s (never the index page).
+MISSING_URLS=("${BASE_URL}/does-not-exist" "${BASE_URL}/foo/bar")
+
+echo "== Scenario 1: root route"
+code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "${HTML_URLS[0]}")"
+assert_code 200 "${code}" "/"
+body="$(curl -sS --max-time 5 "${HTML_URLS[0]}")"
+printf '%s' "${body}" | grep -q 'id="map"' || fail "/: body must contain the Daylight map page"
+h="$(curl -fsSI --max-time 5 "${HTML_URLS[0]}" | tr -d '\r')"
+check_html_response "${h}"
+ok "/: HTTP 200, map HTML, security headers, Cache-Control: no-cache"
+
+echo "== Scenario 2: explicit pages"
+code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "${HTML_URLS[1]}")"
+assert_code 200 "${code}" "/index.html"
+code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "${HTML_URLS[2]}")"
+assert_code 200 "${code}" "/globe.html"
+for url in "${HTML_URLS[@]:1}"; do
   h="$(curl -fsSI --max-time 5 "${url}" | tr -d '\r')"
   check_html_response "${h}"
-  ok "${url#${BASE_URL}}: security headers present, Cache-Control: no-cache"
 done
+ok "/index.html and /globe.html: HTTP 200, security headers, Cache-Control: no-cache"
 
-echo "== Scenario 2: JavaScript asset"
+echo "== Scenario 3: missing extensionless route"
+code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "${MISSING_URLS[0]}")"
+assert_code 404 "${code}" "/does-not-exist"
+body="$(curl -sS --max-time 5 "${MISSING_URLS[0]}")"
+printf '%s' "${body}" | grep -q 'id="map"' \
+  && fail "/does-not-exist: 404 body must not contain the index page"
+h="$(curl -sS -D - -o /dev/null --max-time 5 "${MISSING_URLS[0]}" | tr -d '\r')"
+check_security_headers_in "${h}"
+assert_no_cache_header_in "${h}"
+ok "/does-not-exist: HTTP 404, no HTML fallback, security headers, no cache header"
+
+echo "== Scenario 4: nested missing route"
+code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "${MISSING_URLS[1]}")"
+assert_code 404 "${code}" "/foo/bar"
+body="$(curl -sS --max-time 5 "${MISSING_URLS[1]}")"
+printf '%s' "${body}" | grep -q 'id="map"' \
+  && fail "/foo/bar: 404 body must not contain the index page"
+h="$(curl -sS -D - -o /dev/null --max-time 5 "${MISSING_URLS[1]}" | tr -d '\r')"
+check_security_headers_in "${h}"
+assert_no_cache_header_in "${h}"
+ok "/foo/bar: HTTP 404, no HTML fallback, security headers, no cache header"
+
+echo "== Scenario 5: missing immutable-looking asset"
+code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "${BASE_URL}/definitely-missing.js")"
+assert_code 404 "${code}" "/definitely-missing.js"
+body="$(curl -sS --max-time 5 "${BASE_URL}/definitely-missing.js")"
+printf '%s' "${body}" | grep -q 'id="map"' \
+  && fail "/definitely-missing.js: 404 body must not be the index page"
+h="$(curl -sS -D - -o /dev/null --max-time 5 "${BASE_URL}/definitely-missing.js" | tr -d '\r')"
+check_security_headers_in "${h}"
+assert_no_cache_header_in "${h}"
+ok "/definitely-missing.js: HTTP 404, no HTML fallback, no immutable cache header"
+
+echo "== Scenario 6: CSP report POST"
+code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/csp-report' --data '{"csp-report":{}}' --max-time 5 "${BASE_URL}/csp-report")"
+[[ "${code}" == "204" ]] || fail "/csp-report POST: expected HTTP 204, got ${code}"
+len="$(curl -sS -X POST -H 'Content-Type: application/csp-report' --data '{"csp-report":{}}' --max-time 5 "${BASE_URL}/csp-report" | wc -c | tr -d ' ')"
+[[ "${len}" == "0" ]] || fail "/csp-report POST: expected an empty body, got ${len} bytes"
+h="$(curl -sS -D - -o /dev/null -X POST -H 'Content-Type: application/csp-report' --data '{"csp-report":{}}' --max-time 5 "${BASE_URL}/csp-report" | tr -d '\r')"
+check_security_headers_in "${h}"
+assert_no_cache_header_in "${h}"
+ok "/csp-report POST: HTTP 204, empty body discarded, security headers, no cache header"
+
+echo "== Scenario 7: CSP report wrong method"
+code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "${BASE_URL}/csp-report")"
+assert_code 405 "${code}" "/csp-report GET"
+h="$(curl -sS -D - -o /dev/null --max-time 5 "${BASE_URL}/csp-report" | tr -d '\r')"
+check_security_headers_in "${h}"
+assert_no_cache_header_in "${h}"
+ok "/csp-report GET: HTTP 405, security headers, no cache header"
+
+echo "== Scenario 8: existing D-06 header/cache behavior"
 check_immutable_asset_response "$(curl -fsSI --max-time 5 "${ASSET_URLS[0]}" | tr -d '\r')"
 ok "/app.js: security headers present, Cache-Control: public, max-age=31536000, immutable"
-
-echo "== Scenario 3: CSS asset"
 check_immutable_asset_response "$(curl -fsSI --max-time 5 "${ASSET_URLS[1]}" | tr -d '\r')"
 ok "/style.css: security headers present, Cache-Control: public, max-age=31536000, immutable"
-
-echo "== Scenario 4: SVG and image assets"
 for url in "${ASSET_URLS[@]:2}"; do
   check_immutable_asset_response "$(curl -fsSI --max-time 5 "${url}" | tr -d '\r')"
   ok "${url#${BASE_URL}}: security headers present, Cache-Control: public, max-age=31536000, immutable"
 done
 
-echo "== All nginx header tests passed"
+echo "== All nginx header and routing tests passed"
