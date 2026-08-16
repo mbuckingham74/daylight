@@ -14,6 +14,7 @@
   if (!window.BrowserLocation) missingDeps.push('Browser location module');
   if (!window.SolarDetails) missingDeps.push('Solar details module');
   if (!window.UrlState) missingDeps.push('URL state module');
+  if (!window.TimeState) missingDeps.push('Time state module');
   if (!window.DaylightFormat) missingDeps.push('Formatting module');
   if (!window.L) missingDeps.push('Leaflet (map library)');
   if (!window.SunCalc) missingDeps.push('SunCalc (sunrise/sunset times)');
@@ -34,6 +35,7 @@
   const BrowserLocation = window.BrowserLocation;
   const SolarDetails = window.SolarDetails;
   const UrlState = window.UrlState;
+  const TimeState = window.TimeState;
   const DaylightFormat = window.DaylightFormat;
   const { getSeasonEventYear, isWithinSupportedRange } = window.SeasonYear;
   const {
@@ -66,6 +68,57 @@
     ? initialZoom
     : WORLD_OVERVIEW_ZOOM;
   let timeFormat = getStoredTimeFormat();
+
+  // ── Time / live / pinned state (A-04) ────────────────────────────────
+  // The displayed instant is canonical domain state owned by TimeState
+  // (time-state.js): live vs pinned, the pinned anchor, the slider offset,
+  // and the selected seasonal-preset identity. app.js is the composition
+  // root — handlers call explicit TimeState operations and then drive the
+  // existing update flow. Astronomy (matching the initial URL instant to a
+  // seasonal event for the preset identity) is injected via resolvePresetKey;
+  // the state model itself contains none. Initialization semantics are
+  // preserved exactly: no URL time -> live, valid URL time -> pinned with a
+  // possibly-null selected preset, malformed URL time -> live (SM already
+  // normalized null upstream).
+  const PRESET_KEYS = ['mar-equinox', 'jun-solstice', 'sep-equinox', 'dec-solstice'];
+
+  function getPresetEventDate(key, year) {
+    const events = SM.getSeasonEvents(year);
+    switch (key) {
+      case 'mar-equinox': return events[0].date;
+      case 'jun-solstice': return events[1].date;
+      case 'sep-equinox': return events[2].date;
+      case 'dec-solstice': return events[3].date;
+      default: return null;
+    }
+  }
+
+  function findPresetKeyForDate(date) {
+    if (!isValidDate(date)) return null;
+    const year = date.getUTCFullYear();
+    return PRESET_KEYS.find(key => {
+      const eventDate = getPresetEventDate(key, year);
+      return eventDate && Math.abs(date.getTime() - eventDate.getTime()) < 3600000;
+    }) || null;
+  }
+
+  const timeState = TimeState.create({
+    initialTime,
+    resolvePresetKey: findPresetKeyForDate
+  });
+
+  // The composition root's key seam: the current effective display instant.
+  // Live mode derives it from the wall clock; pinned mode is deterministic.
+  function currentTime() {
+    return timeState.getCurrentTime();
+  }
+
+  // The astronomical (UTC) year whose seasonal events are the active preset
+  // candidates (D-05): the pinned anchor's year when pinned, else now's year.
+  function getActiveYear() {
+    if (timeState.isLive()) return getSeasonEventYear(new Date());
+    return getSeasonEventYear(timeState.getPinTime());
+  }
 
   const map = L.map('map', {
     center: mapCenter,
@@ -695,34 +748,7 @@
     applyPanelState();
   });
 
-  const PRESET_KEYS = ['mar-equinox', 'jun-solstice', 'sep-equinox', 'dec-solstice'];
-
-  function getPresetEventDate(key, year) {
-    const events = SM.getSeasonEvents(year);
-    switch (key) {
-      case 'mar-equinox': return events[0].date;
-      case 'jun-solstice': return events[1].date;
-      case 'sep-equinox': return events[2].date;
-      case 'dec-solstice': return events[3].date;
-      default: return null;
-    }
-  }
-
-  function getActiveYear() {
-    if (isLive || !manualTime) return getSeasonEventYear(new Date());
-    return getSeasonEventYear(manualTime);
-  }
-
   let followSun = false;
-  let isLive = !initialTime;
-  let manualTime = initialTime ? new Date(initialTime.getTime()) : new Date();
-  let sliderOffsetHours = 0;
-  let selectedPresetKey = initialTime ? findPresetKeyForDate(initialTime) : null;
-
-  function currentTime() {
-    if (isLive) return new Date();
-    return new Date(manualTime.getTime() + sliderOffsetHours * 3600000);
-  }
 
   function setPanelPage(pageId) {
     document.querySelectorAll('.panel-page').forEach(page => {
@@ -814,15 +840,6 @@
     if (followSun) centerMapOnSun(0.3);
   });
 
-  function findPresetKeyForDate(date) {
-    if (!isValidDate(date)) return null;
-    const year = date.getUTCFullYear();
-    return PRESET_KEYS.find(key => {
-      const eventDate = getPresetEventDate(key, year);
-      return eventDate && Math.abs(date.getTime() - eventDate.getTime()) < 3600000;
-    }) || null;
-  }
-
   function getPresetEventDateForActiveYear(key) {
     return getPresetEventDate(key, getActiveYear());
   }
@@ -858,7 +875,7 @@
           hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short'
         });
       }
-      const active = !isLive && sliderOffsetHours === 0 && selectedPresetKey === key;
+      const active = !timeState.isLive() && timeState.getSliderOffset() === 0 && timeState.isSelectedPresetKey(key);
       btn.classList.toggle('active', active);
       btn.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
@@ -917,21 +934,22 @@
     }
   });
 
-  // Time slider: ±12 hours around the current manualTime anchor.
+  // Time slider: ±12 hours around the current pinned anchor.
   // The anchor is set when a preset is chosen or when the user first drags
   // the slider from live mode. This makes presets and the slider compose.
   function updateSliderLabel() {
     const target = currentTime();
-    if (isLive) {
+    if (timeState.isLive()) {
       timeSliderValue.textContent = 'Live';
       timeSlider.setAttribute('aria-valuetext', 'Live mode');
     } else {
       const utcText = `${formatUtcDate(target)} ${formatTime(target)} UTC`;
       const localText = formatLocalDateTime(target);
       timeSliderValue.textContent = `${utcText} / ${localText}`;
-      const offsetDesc = sliderOffsetHours === 0
+      const offset = timeState.getSliderOffset();
+      const offsetDesc = offset === 0
         ? 'at anchor time'
-        : `${sliderOffsetHours > 0 ? '+' : ''}${sliderOffsetHours.toFixed(1)} hours from anchor`;
+        : `${offset > 0 ? '+' : ''}${offset.toFixed(1)} hours from anchor`;
       timeSlider.setAttribute('aria-valuetext', `${offsetDesc}, ${utcText}`);
     }
   }
@@ -945,14 +963,15 @@
   }
 
   function updateDateTimeInput() {
-    if (isLive) {
+    if (timeState.isLive()) {
       datetimeInput.value = '';
       datetimeInput.placeholder = 'Live mode — click to pick a time';
       datetimeUtcHint.textContent = '';
     } else {
-      datetimeInput.value = formatDateTimeLocal(manualTime);
-      const utcText = `${formatUtcDate(manualTime)} ${formatTime(manualTime)} UTC`;
-      const outOfRange = !isWithinSupportedRange(manualTime);
+      const pinTime = timeState.getPinTime();
+      datetimeInput.value = formatDateTimeLocal(pinTime);
+      const utcText = `${formatUtcDate(pinTime)} ${formatTime(pinTime)} UTC`;
+      const outOfRange = !isWithinSupportedRange(pinTime);
       datetimeUtcHint.textContent = outOfRange
         ? `${utcText} — ⚠ outside 1900–2100 accuracy range`
         : utcText;
@@ -964,10 +983,7 @@
     if (!this.value) return;
     const parsed = new Date(this.value);
     if (isNaN(parsed.getTime())) return;
-    isLive = false;
-    manualTime = parsed;
-    sliderOffsetHours = 0;
-    selectedPresetKey = null;
+    timeState.pin(parsed);
     timeSlider.value = 0;
     liveBtn.classList.remove('active');
     updateSliderLabel();
@@ -979,14 +995,11 @@
 
   let sliderRaf = null;
   timeSlider.addEventListener('input', function () {
-    if (isLive) {
-      // Freeze the anchor at the current live moment before applying offset
-      manualTime = new Date();
-      isLive = false;
-      liveBtn.classList.remove('active');
-      selectedPresetKey = null;
-    }
-    sliderOffsetHours = parseFloat(this.value);
+    const wasLive = timeState.isLive();
+    // Freeze the anchor at the current live moment before applying offset
+    // when the user grabs the slider from live mode.
+    timeState.moveSlider(parseFloat(this.value));
+    if (wasLive) liveBtn.classList.remove('active');
     updateSliderLabel();
     updateDateTimeInput();
     updatePresetSelection();
@@ -999,11 +1012,8 @@
   });
 
   liveBtn.addEventListener('click', function () {
-    isLive = true;
-    manualTime = new Date();
-    sliderOffsetHours = 0;
+    timeState.goLive();
     timeSlider.value = 0;
-    selectedPresetKey = null;
     updateSliderLabel();
     updateDateTimeInput();
     updatePresetSelection();
@@ -1017,10 +1027,7 @@
       const key = this.getAttribute('data-preset');
       const presetTime = getPresetEventDateForActiveYear(key);
       if (presetTime) {
-        isLive = false;
-        manualTime = new Date(presetTime.getTime());
-        sliderOffsetHours = 0;
-        selectedPresetKey = key;
+        timeState.pin(presetTime, { presetKey: key });
         timeSlider.value = 0;
         liveBtn.classList.remove('active');
         updateSliderLabel();
@@ -1037,7 +1044,7 @@
   const urlState = UrlState.create({
     getEl: id => document.getElementById(id),
     getTime: currentTime,
-    isLive: () => isLive,
+    isLive: () => timeState.isLive(),
     getView: () => ({
       lat: map.getCenter().lat,
       lng: map.getCenter().lng,
@@ -1066,7 +1073,7 @@
     // mode and never for a static pinned instant (D-02): explicit time
     // changes already rendered immediately through their own handlers.
     if (scheduler.shouldRunHeavyUpdate({
-      isLive,
+      isLive: timeState.isLive(),
       nowMs,
       lastHeavyUpdateMs,
       heavyIntervalMs: LIVE_HEAVY_INTERVAL_MS
@@ -1074,7 +1081,7 @@
       updateHeavy(now);
     }
 
-    if (isLive) {
+    if (timeState.isLive()) {
       updateSliderLabel();
     }
 
@@ -1096,7 +1103,7 @@
     if (!document.hidden) {
       const now = currentTime();
       update(now);
-      if (isLive) updateSliderLabel();
+      if (timeState.isLive()) updateSliderLabel();
     }
   });
 
