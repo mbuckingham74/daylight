@@ -101,7 +101,10 @@ rm -rf -- "${BACKUP_DIR}"
 REMOTE
 
 # Recreate only Daylight and preserve the already-reviewed image identity.
-ssh "${SERVER}" "cd '${REMOTE_DIR}' && docker compose -p daylight up -d --no-deps --pull never daylight-static"
+# The atomic directory swap above changes the bind-mount source inode even
+# when the Compose model is otherwise identical. Force recreation so Docker
+# mounts the new deployment tree instead of retaining the removed old inode.
+ssh "${SERVER}" "cd '${REMOTE_DIR}' && docker compose -p daylight up -d --force-recreate --no-deps --pull never daylight-static"
 trap - EXIT
 
 echo "Deployment complete. Site should be available at https://daylight.forkstech.com"

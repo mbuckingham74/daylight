@@ -20,6 +20,7 @@
 #   5. Foxguard reports a violation: deploy exits non-zero, zero mutation.
 #   6. Foxguard cannot execute: deploy fails closed, zero mutation.
 #   7. A dirty worktree is refused before Foxguard runs.
+#   8. The service is force-recreated after the atomic directory swap.
 #
 # Usage: bash tests/deploy.test.sh   (run from anywhere)
 
@@ -163,6 +164,8 @@ assert_exists "${REMOTE_DIR}/.deployment.json"
 assert_exists "${UP_MARKER}"
 assert_missing "${REMOTE_DIR}.old"
 assert_missing "${STAGING_DIR}"
+grep -q -- "up -d --force-recreate --no-deps --pull never daylight-static" "${DOCKER_LOG}" \
+  || fail "repeat deploy must force-recreate Daylight after the atomic directory swap"
 rm -f "${UP_MARKER}"
 
 echo "== Scenario 3: validation failure leaves the live deployment intact"
