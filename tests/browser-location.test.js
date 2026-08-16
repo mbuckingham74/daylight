@@ -1,6 +1,11 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const BrowserLocation = require('../html/browser-location.js');
+const DaylightCities = require('../html/cities.js');
+
+// The nearest-city collection comes from the canonical cities.js module
+// (A-02); findNearestBrowserCity takes it explicitly.
+const LOCATION_CITIES = DaylightCities.locationCities;
 
 describe('browser location — great-circle distance', () => {
   test('computes a known London-New York distance', () => {
@@ -21,31 +26,39 @@ describe('browser location — great-circle distance', () => {
 
 describe('browser location — nearest-city lookup', () => {
   test('exact Seattle coordinates resolve to Seattle, WA USA', () => {
-    const nearest = BrowserLocation.findNearestBrowserCity(47.6062, -122.3321);
+    const nearest = BrowserLocation.findNearestBrowserCity(47.6062, -122.3321, LOCATION_CITIES);
     assert.equal(nearest.name, 'Seattle, WA USA');
     assert.ok(nearest.distance < 1);
   });
 
   test('San Francisco Bay coordinates resolve to San Francisco', () => {
-    const nearest = BrowserLocation.findNearestBrowserCity(37.77, -122.42);
+    const nearest = BrowserLocation.findNearestBrowserCity(37.77, -122.42, LOCATION_CITIES);
     assert.equal(nearest.name, 'San Francisco, CA USA');
   });
 
   test('midwest coordinates resolve to Kansas City', () => {
-    const nearest = BrowserLocation.findNearestBrowserCity(39.0, -95.0);
+    const nearest = BrowserLocation.findNearestBrowserCity(39.0, -95.0, LOCATION_CITIES);
     assert.equal(nearest.name, 'Kansas City, MO USA');
   });
 
   test('southern-hemisphere coordinates resolve to Sydney', () => {
-    const nearest = BrowserLocation.findNearestBrowserCity(-33.86, 151.21);
+    const nearest = BrowserLocation.findNearestBrowserCity(-33.86, 151.21, LOCATION_CITIES);
     assert.equal(nearest.name, 'Sydney, Australia');
   });
 
   test('the nearest-city result carries the matched dataset entry', () => {
-    const nearest = BrowserLocation.findNearestBrowserCity(40.7128, -74.0060);
+    const nearest = BrowserLocation.findNearestBrowserCity(40.7128, -74.0060, LOCATION_CITIES);
     assert.equal(nearest.name, 'New York, NY USA');
     assert.equal(nearest.lat, 40.7128);
     assert.equal(nearest.lng, -74.0060);
+  });
+
+  test('nearest-city lookup sees the canonical shared records', () => {
+    const nearest = BrowserLocation.findNearestBrowserCity(47.6062, -122.3321, LOCATION_CITIES);
+    const canonical = DaylightCities.locationCities[0];
+    assert.equal(nearest.name, canonical.name);
+    assert.equal(nearest.lat, canonical.lat);
+    assert.equal(nearest.lng, canonical.lng);
   });
 });
 

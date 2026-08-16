@@ -10,6 +10,7 @@
   if (!window.DaylightView) missingDeps.push('Map view module');
   if (!window.AppScheduler) missingDeps.push('App scheduler module');
   if (!window.SeasonYear) missingDeps.push('Season year module');
+  if (!window.DaylightCities) missingDeps.push('City data module');
   if (!window.BrowserLocation) missingDeps.push('Browser location module');
   if (!window.SolarDetails) missingDeps.push('Solar details module');
   if (!window.UrlState) missingDeps.push('URL state module');
@@ -28,6 +29,7 @@
   const SM = window.SolarMath;
   const View = window.DaylightView;
   const scheduler = window.AppScheduler;
+  const DaylightCities = window.DaylightCities;
   const BrowserLocation = window.BrowserLocation;
   const SolarDetails = window.SolarDetails;
   const UrlState = window.UrlState;
@@ -295,24 +297,9 @@
     subsolarLabel.update();
   }
 
-  const cities = [
-    { name: 'London', lat: 51.5074, lng: -0.1278, tz: 'Europe/London' },
-    { name: 'New York', lat: 40.7128, lng: -74.0060, tz: 'America/New_York' },
-    { name: 'Tokyo', lat: 35.6762, lng: 139.6503, tz: 'Asia/Tokyo' },
-    { name: 'Sydney', lat: -33.8688, lng: 151.2093, tz: 'Australia/Sydney' },
-    { name: 'São Paulo', lat: -23.5505, lng: -46.6333, tz: 'America/Sao_Paulo' },
-    { name: 'Cairo', lat: 30.0444, lng: 31.2357, tz: 'Africa/Cairo' },
-    { name: 'Mumbai', lat: 19.0760, lng: 72.8777, tz: 'Asia/Kolkata' },
-    { name: 'Singapore', lat: 1.3521, lng: 103.8198, tz: 'Asia/Singapore' },
-    { name: 'Los Angeles', lat: 34.0522, lng: -118.2437, tz: 'America/Los_Angeles' },
-    { name: 'Paris', lat: 48.8566, lng: 2.3522, tz: 'Europe/Paris' },
-    { name: 'Moscow', lat: 55.7558, lng: 37.6173, tz: 'Europe/Moscow' },
-    { name: 'Beijing', lat: 39.9042, lng: 116.4074, tz: 'Asia/Shanghai' },
-    { name: 'Johannesburg', lat: -26.2041, lng: 28.0473, tz: 'Africa/Johannesburg' },
-    { name: 'Dubai', lat: 25.2048, lng: 55.2708, tz: 'Asia/Dubai' },
-    { name: 'Bangkok', lat: 13.7563, lng: 100.5018, tz: 'Asia/Bangkok' }
-  ];
-
+  // Canonical city data lives in cities.js (A-02): one record per city,
+  // with the visible-marker subset selected by DaylightCities.markerCities.
+  const cities = DaylightCities.markerCities;
   let cityLayer = L.layerGroup().addTo(map);
 
   function renderCities() {
@@ -331,7 +318,7 @@
         L.DomEvent.stopPropagation(e);
         map.panTo([city.lat, city.lng], panOptions(0.8));
         setFollowSun(false);
-        showLocationTimes(city.lat, city.lng, city.name, city.tz);
+        showLocationTimes(city.lat, city.lng, city.markerName || city.name, city.timeZone);
       });
 
       L.tooltip({
@@ -340,7 +327,7 @@
         offset: [0, -6],
         className: 'city-label'
       })
-        .setContent(city.name)
+        .setContent(city.markerName || city.name)
         .setLatLng([city.lat, city.lng])
         .addTo(cityLayer);
     });
@@ -733,6 +720,7 @@
     getTimeZoneAbbr,
     getDayLengthSeconds,
     getCurrentTime: currentTime,
+    cities: DaylightCities.locationCities,
     showLocationTimes,
     setFollowSun,
     centerMapOnLocation: (lat, lng) => {
