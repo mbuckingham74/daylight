@@ -8,7 +8,7 @@
   const missingDeps = [];
   if (!window.SolarMath) missingDeps.push('Solar math module');
   if (!window.DaylightView) missingDeps.push('Map view module');
-  if (!window.L) missingDeps.push('Leaflet (map library)');
+  if (!window.AppScheduler) missingDeps.push('App scheduler module'); if (!window.L) missingDeps.push('Leaflet (map library)');
   if (!window.SunCalc) missingDeps.push('SunCalc (sunrise/sunset times)');
 
   if (missingDeps.length > 0) {
@@ -22,6 +22,7 @@
 
   const SM = window.SolarMath;
   const View = window.DaylightView;
+  const scheduler = window.AppScheduler;
   const {
     D2R, MS_PER_DAY, TWILIGHT_THRESHOLDS,
     normalizeDegrees, wrapLng, clamp,
@@ -1034,7 +1035,9 @@
   // ── State-aware update scheduler ────────────────────────────────────
   // The clock display updates every second. The expensive twilight tile
   // redraw and chart rendering run at a reduced rate (~20s) in live mode
-  // and immediately on manual interaction (slider, preset, resize, hover settle).
+  // and immediately on manual interaction (slider, preset, resize, hover
+  // settle). In pinned/time-travel mode the displayed instant is static, so
+  // the tick never schedules heavy work (D-02); interactions render directly.
 
   const LIVE_HEAVY_INTERVAL_MS = 20000;
   let lastHeavyUpdateMs = 0;
@@ -1903,8 +1906,15 @@
     // Clock display updates every second (cheap)
     updateClock(now);
 
-    // Heavy updates (twilight tiles, charts) run at a reduced rate in live mode
-    if (!isLive || nowMs - lastHeavyUpdateMs >= LIVE_HEAVY_INTERVAL_MS) {
+    // Heavy updates (twilight tiles, charts) run at a reduced rate in live
+    // mode and never for a static pinned instant (D-02): explicit time
+    // changes already rendered immediately through their own handlers.
+    if (scheduler.shouldRunHeavyUpdate({
+      isLive,
+      nowMs,
+      lastHeavyUpdateMs,
+      heavyIntervalMs: LIVE_HEAVY_INTERVAL_MS
+    })) {
       updateHeavy(now);
     }
 
