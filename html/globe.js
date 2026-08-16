@@ -39,6 +39,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   const SM = window.SolarMath;
   const GM = window.GlobeMath;
   const GC = window.GlobeClouds;
+  const DF = window.DaylightFormat;
 
   // ── Constants ─────────────────────────────────────────────────────────
   const ASSET_VERSION = '20260804a';
@@ -94,10 +95,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   // ── Dependency and WebGL checks ───────────────────────────────────────
   // (Three.js load failure is caught by the watchdog in globe.html, because
   // a failed module import prevents this script from running at all.)
-  if (!SM || !GM || !GC) {
+  if (!SM || !GM || !GC || !DF) {
     showFailure(
       'The 3D globe could not be started.',
-      'A required script (solar.js, globe-math.js, or globe-clouds.js) did not load. Check the browser console, then try again.'
+      'A required script (solar.js, globe-math.js, globe-clouds.js, or format.js) did not load. Check the browser console, then try again.'
     );
     return;
   }
@@ -644,16 +645,13 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   }
 
   // ── Solar state + panel clock (once per second, not per frame) ───────
-  function formatCoord(lat, lng) {
-    const ns = lat >= 0 ? 'N' : 'S';
-    const ew = lng >= 0 ? 'E' : 'W';
-    return `${Math.abs(lat).toFixed(2)}°${ns}, ${Math.abs(lng).toFixed(2)}°${ew}`;
-  }
-
+  // Coordinates and the UTC date stamp come from the shared DaylightFormat
+  // module (A-03); the fixed 24-hour clock remains local because this page
+  // has no 12/24-hour preference (unlike the 2D map).
   function updatePanel(date) {
     const subsolar = SM.getSubsolarPoint(date);
-    els.utcTime.textContent = `${date.toISOString().slice(0, 10)} ${date.toISOString().slice(11, 19)} UTC`;
-    els.sunPosition.textContent = formatCoord(subsolar.lat, subsolar.lng);
+    els.utcTime.textContent = `${DF.formatUtcDate(date)} ${date.toISOString().slice(11, 19)} UTC`;
+    els.sunPosition.textContent = DF.formatCoord(subsolar.lat, subsolar.lng);
   }
 
   function tick() {

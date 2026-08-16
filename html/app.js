@@ -14,6 +14,7 @@
   if (!window.BrowserLocation) missingDeps.push('Browser location module');
   if (!window.SolarDetails) missingDeps.push('Solar details module');
   if (!window.UrlState) missingDeps.push('URL state module');
+  if (!window.DaylightFormat) missingDeps.push('Formatting module');
   if (!window.L) missingDeps.push('Leaflet (map library)');
   if (!window.SunCalc) missingDeps.push('SunCalc (sunrise/sunset times)');
 
@@ -33,10 +34,11 @@
   const BrowserLocation = window.BrowserLocation;
   const SolarDetails = window.SolarDetails;
   const UrlState = window.UrlState;
+  const DaylightFormat = window.DaylightFormat;
   const { getSeasonEventYear, isWithinSupportedRange } = window.SeasonYear;
   const {
     D2R, MS_PER_DAY, TWILIGHT_THRESHOLDS,
-    normalizeDegrees, wrapLng, clamp,
+    wrapLng, clamp,
     isValidDate, getSunEquatorial, getSubsolarPoint, getSunRenderState,
     getSolarSinAltitude, getEarthSunDistanceAu, getSolarOrbitStats,
     getEquationOfTimeMinutes, getSolarPosition, getGlobalLightFractions,
@@ -334,50 +336,43 @@
   }
   renderCities();
 
-  function formatCoord(lat, lng) {
-    const ns = lat >= 0 ? 'N' : 'S';
-    const ew = lng >= 0 ? 'E' : 'W';
-    return `${Math.abs(lat).toFixed(2)}°${ns}, ${Math.abs(lng).toFixed(2)}°${ew}`;
-  }
-
-  function getClockOptions(timeZone, includeSeconds = false) {
-    const options = {
-      hour: is12HourTime() ? 'numeric' : '2-digit',
-      minute: '2-digit',
-      hour12: is12HourTime()
-    };
-    if (includeSeconds) options.second = '2-digit';
-    if (timeZone) options.timeZone = timeZone;
-    return options;
-  }
+  // ── Formatting (A-03) ────────────────────────────────────────────────
+  // Canonical presentation formatters live in format.js (DaylightFormat).
+  // app.js is the composition root: it binds them locally and injects the
+  // state-aware clock wrappers (12/24-hour preference) into controllers.
+  const formatCoord = DaylightFormat.formatCoord;
+  const formatUtcDate = DaylightFormat.formatUtcDate;
+  const formatDuration = DaylightFormat.formatDuration;
+  const formatCompactDuration = DaylightFormat.formatCompactDuration;
+  const formatSignedDuration = DaylightFormat.formatSignedDuration;
+  const formatDegrees = DaylightFormat.formatDegrees;
+  const formatSignedDegrees = DaylightFormat.formatSignedDegrees;
+  const formatRightAscension = DaylightFormat.formatRightAscension;
+  const formatPercent = DaylightFormat.formatPercent;
+  const formatMillions = DaylightFormat.formatMillions;
+  const formatLightTime = DaylightFormat.formatLightTime;
+  const formatSeasonCountdown = DaylightFormat.formatSeasonCountdown;
+  const formatPolarDayLength = DaylightFormat.formatPolarDayLength;
+  const getTimeZoneAbbr = DaylightFormat.getTimeZoneAbbr;
 
   function formatTime(date) {
-    if (!date || isNaN(date.getTime())) return '--:--';
-    return date.toLocaleTimeString('en-US', getClockOptions('UTC'));
+    return DaylightFormat.formatTime(date, { hour12: is12HourTime() });
   }
 
   function formatTimeTz(date, timeZone) {
-    if (!date || isNaN(date.getTime())) return '--:--';
-    if (!timeZone) return formatTime(date);
-    try {
-      return date.toLocaleTimeString('en-US', getClockOptions(timeZone));
-    } catch (e) {
-      return formatTime(date);
-    }
+    return DaylightFormat.formatTime(date, { timeZone: timeZone || 'UTC', hour12: is12HourTime() });
   }
 
   function formatClockTz(date, timeZone) {
-    if (!date || isNaN(date.getTime())) return '--:--:--';
-    if (!timeZone) return date.toLocaleTimeString('en-US', getClockOptions('UTC', true));
-    try {
-      return date.toLocaleTimeString('en-US', getClockOptions(timeZone, true));
-    } catch (e) {
-      return date.toLocaleTimeString('en-US', getClockOptions('UTC', true));
-    }
+    return DaylightFormat.formatTime(date, { timeZone: timeZone || 'UTC', seconds: true, hour12: is12HourTime() });
   }
 
-  function formatUtcDate(date) {
-    return date.toISOString().slice(0, 10);
+  function formatSiderealTime(degrees) {
+    return formatRightAscension(degrees);
+  }
+
+  function formatChartClock(date) {
+    return formatTime(date) + ' UTC';
   }
 
   function lookupTimeZone(lat, lng) {
@@ -435,87 +430,6 @@
     }
 
     setStatValue('hover-local-time', formatClockTz(date, timeZone) + ' ' + timeZoneLabel);
-  }
-
-  function formatDuration(seconds) {
-    if (!isFinite(seconds) || seconds < 0) return '--';
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    return `${h}h ${m}m`;
-  }
-
-  function formatCompactDuration(seconds) {
-    if (!isFinite(seconds) || seconds < 0) return '--';
-    const rounded = Math.round(seconds);
-    const h = Math.floor(rounded / 3600);
-    const m = Math.floor((rounded % 3600) / 60);
-    const s = rounded % 60;
-    if (h > 0) return `${h}h ${m}m`;
-    if (m > 0) return `${m}m ${s}s`;
-    return `${s}s`;
-  }
-
-  function formatSignedDuration(seconds) {
-    if (!isFinite(seconds)) return '--';
-    const sign = seconds > 0 ? '+' : seconds < 0 ? '-' : '';
-    return sign + formatCompactDuration(Math.abs(seconds));
-  }
-
-  function formatDegrees(value, decimals = 2) {
-    if (!isFinite(value)) return '--';
-    return `${value.toFixed(decimals)}°`;
-  }
-
-  function formatSignedDegrees(value, decimals = 2) {
-    if (!isFinite(value)) return '--';
-    const sign = value > 0 ? '+' : value < 0 ? '-' : '';
-    return `${sign}${Math.abs(value).toFixed(decimals)}°`;
-  }
-
-  function formatRightAscension(degrees) {
-    if (!isFinite(degrees)) return '--';
-    const totalMinutes = Math.round(normalizeDegrees(degrees) / 15 * 60);
-    const hours = Math.floor(totalMinutes / 60) % 24;
-    const minutes = totalMinutes % 60;
-    return `${hours}h ${String(minutes).padStart(2, '0')}m`;
-  }
-
-  function formatSiderealTime(degrees) {
-    return formatRightAscension(degrees);
-  }
-
-  function formatPercent(value, decimals = 1) {
-    if (!isFinite(value)) return '--';
-    return `${(value * 100).toFixed(decimals)}%`;
-  }
-
-  function formatMillions(value) {
-    if (!isFinite(value)) return '--';
-    return `${(value / 1000000).toFixed(2)}M`;
-  }
-
-  function formatLightTime(seconds) {
-    if (!isFinite(seconds)) return '--';
-    const minutes = Math.floor(seconds / 60);
-    const remainder = Math.round(seconds % 60);
-    return `${minutes}m ${String(remainder).padStart(2, '0')}s`;
-  }
-
-  function formatSeasonCountdown(event, date) {
-    if (!event) return '--';
-    const remaining = event.date - date;
-    if (remaining <= 0) return event.name;
-    const hours = Math.round(remaining / 3600000);
-    if (hours < 48) return `${event.name} in ${hours}h`;
-    return `${event.name} in ${Math.round(remaining / MS_PER_DAY)}d`;
-  }
-
-  function formatChartClock(date) {
-    return formatTime(date) + ' UTC';
-  }
-
-  function formatPolarDayLength(isDaylight) {
-    return isDaylight ? '24h 0m' : '0h 0m';
   }
 
   function getDaylightWindows(date, lat, lng) {
@@ -692,16 +606,6 @@
     setStatValue('hover-sunset', 'No sunset');
     setLightStats('hover-light-state', 'hover-daylight-remaining', date, lat, lng);
     setStatValue('hover-daylength', formatPolarDayLength(isDaylight));
-  }
-
-  function getTimeZoneAbbr(timeZone, date = new Date()) {
-    try {
-      const parts = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'short' }).formatToParts(date);
-      const tzPart = parts.find(p => p.type === 'timeZoneName');
-      return tzPart ? tzPart.value : '';
-    } catch (e) {
-      return '';
-    }
   }
 
   const browserLocationController = BrowserLocation.create({

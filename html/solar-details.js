@@ -136,7 +136,7 @@
     setStatValue('solar-light-time', formatLightTime(orbit.lightSeconds));
     setStatValue('solar-orbital-speed', `${orbit.orbitalSpeed.toFixed(2)} km/s`);
     setStatValue('solar-apparent-size', `${formatDegrees(orbit.apparentDiameterDeg, 3)} / ${(orbit.apparentDiameterDeg * 60).toFixed(2)}'`);
-    setStatValue('solar-energy', `${(orbit.energyRatio * 100).toFixed(2)}% / ${Math.round(orbit.solarConstant)} W/m2`);
+    setStatValue('solar-energy', `${formatPercent(orbit.energyRatio, 2)} / ${Math.round(orbit.solarConstant)} W/m2`);
     getEl('solar-distance-trend').textContent = `${orbit.trend} (${dailyChangeText})`;
 
     setStatValue('earth-axial-tilt', formatDegrees(sun.obliquity, 4));

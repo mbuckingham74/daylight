@@ -2,10 +2,10 @@
   "version": 1,
   "entries": [
     {
-      "fingerprint": "f7c9f0697554828154d4cfc53a66e2f7a4db6887146b062080b527db3bc5dabf",
+      "fingerprint": "dc7037ff22be06e992ccb67f02b59b4d35ac19e65b99d776b51f1af4ad7dfd50",
       "rule_id": "js/no-xss-innerhtml",
       "file": "html/app.js",
-      "line": 24
+      "line": 25
     }
   ]
 }
