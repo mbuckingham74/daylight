@@ -52,7 +52,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   };
   const EARTH_RADIUS = 1;
   const CLOUD_RADIUS = 1.008;
-  const ATMOSPHERE_RADIUS = 1.09;
+  const ATMOSPHERE_RADIUS = 1.025;
   const STAR_RADIUS = 220;
   const MIN_CAMERA_DISTANCE = 1.32;
   const MAX_CAMERA_DISTANCE = 7;
@@ -631,7 +631,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
       uExposure: { value: 1.0 },
       uBandSmoothness: { value: BAND_SMOOTHNESS },
       uNightFadeHalfWidth: { value: NIGHT_FADE_HALF_WIDTH },
-      uStrength: { value: 0.8 }
+      uStrength: { value: 0.5 }
     }, sharedUniforms),
     vertexShader: `
       varying vec3 vNormal;

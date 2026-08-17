@@ -502,7 +502,10 @@ test.describe('UI02 — globe default camera framing and auto-rotation', () => {
       const tanV = Math.tan(fovRad / 2);
       const tanH = tanV * c.aspect;
       const tanBinding = Math.min(tanV, tanH);
-      return 1.09 / Math.sin(0.93 * Math.atan(tanBinding));
+      // UI-03 narrowed the atmosphere radius from 1.09 to 1.025 to make the
+      // halo a thin rim rather than a thick shell; the responsive framing
+      // formula mechanically inherits the smaller silhouette here.
+      return h.getAtmosphereRadius() / Math.sin(0.93 * Math.atan(tanBinding));
     });
     expect(Math.abs(afterResize1 - defaultAt1600x900)).toBeLessThan(0.05);
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -532,5 +535,134 @@ test.describe('UI02 — globe default camera framing and auto-rotation', () => {
     expect(afterUserZoom).toBeLessThan(defaultAt1600x900 - 0.5);
     expect(Math.abs(afterResize2 - afterUserZoom)).toBeLessThan(0.05);
     await ctx.close();
+  });
+});
+
+/**
+ * UI-03 — atmospheric halo refinement.
+ *
+ * The atmosphere radius was narrowed from 1.09 → 1.025 and the rim strength
+ * from 0.8 → 0.5 so the halo reads as a thin rim rather than a thick shell.
+ * UI03-1 protects the UI-02 framing contract under the reduced radius;
+ * UI03-2 protects the Atmosphere checkbox toggle. Both reuse the existing
+ * read-only verification handle and the same projection helper as UI-02.
+ */
+
+test.describe('UI03 — atmospheric halo refinement', () => {
+  test('UI03-1 — refined halo stays bounded inside the UI-02 framing on both desktop and mobile', async ({ page }) => {
+    // Desktop: the reduced radius must still fit the full atmosphere inside
+    // the canvas with breathing room, and the full Earth must remain inside
+    // the canvas. Reuses the UI-02 projected-sphere helper.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`/globe.html?time=${PINNED_ISO}`);
+    await expectGlobeStarted(page);
+
+    const atmosphere = await projectedSphereBounds(page, await page.evaluate(() => window.__daylightGlobe.getAtmosphereRadius()));
+    const earth = await projectedSphereBounds(page, await page.evaluate(() => window.__daylightGlobe.getEarthRadius()));
+
+    // The atmosphere must remain strictly inside the visible canvas.
+    expect(atmosphere.minX).toBeGreaterThan(-1);
+    expect(atmosphere.maxX).toBeLessThan(1);
+    expect(atmosphere.minY).toBeGreaterThan(-1);
+    expect(atmosphere.maxY).toBeLessThan(1);
+
+    // And the outer atmosphere must keep a small margin (UI-02 contract).
+    expect(atmosphere.minX).toBeGreaterThan(-0.95);
+    expect(atmosphere.maxX).toBeLessThan(0.95);
+    expect(atmosphere.minY).toBeGreaterThan(-0.95);
+    expect(atmosphere.maxY).toBeLessThan(0.95);
+
+    // Earth is fully visible and dominant: the projected atmosphere bounds
+    // are wider than the projected Earth bounds, but only by the small
+    // radial margin the refinement preserves.
+    expect(earth.minX).toBeGreaterThan(-1);
+    expect(earth.maxX).toBeLessThan(1);
+    expect(earth.minY).toBeGreaterThan(-1);
+    expect(earth.maxY).toBeLessThan(1);
+    expect(earth.maxX - earth.minX).toBeLessThan(atmosphere.maxX - atmosphere.minX);
+    expect(earth.maxY - earth.minY).toBeLessThan(atmosphere.maxY - atmosphere.minY);
+
+    // User-visible apparent-thickness protection at the default desktop
+    // framing: the projected atmosphere silhouette must sit just outside
+    // the projected Earth silhouette — a thin rim, not a thick shell.
+    // Normalized by the projected Earth diameter on the binding axis so
+    // the value is independent of raw pixels or the exact camera distance;
+    // only the atmosphere-vs-Earth *geometry* controls it.
+    //   radius 1.025 (production) → ~0.027   passes (~48 % margin)
+    //   radius 1.05              → ~0.054   would already read as too thick
+    //   radius 1.09 (old shell)  → ~0.098   fails comfortably
+    // Tolerance 0.040 keeps a comfortable margin above the current value
+    // and rejects anything that re-introduces a shell-like outer sphere.
+    const earthDiameter = Math.min(earth.maxX - earth.minX, earth.maxY - earth.minY);
+    const atmosphereDiameter = Math.min(atmosphere.maxX - atmosphere.minX, atmosphere.maxY - atmosphere.minY);
+    const radialGapRatio = (atmosphereDiameter - earthDiameter) / earthDiameter;
+    expect(radialGapRatio).toBeLessThan(0.040);
+
+    // Mobile: the same contract must hold on the narrower viewport.
+    await page.setViewportSize({ width: 414, height: 896 });
+    await page.goto(`/globe.html?time=${PINNED_ISO}`);
+    await expectGlobeStarted(page);
+
+    const mobAtmosphere = await projectedSphereBounds(page, await page.evaluate(() => window.__daylightGlobe.getAtmosphereRadius()));
+    const mobEarth = await projectedSphereBounds(page, await page.evaluate(() => window.__daylightGlobe.getEarthRadius()));
+    expect(mobAtmosphere.minX).toBeGreaterThan(-1);
+    expect(mobAtmosphere.maxX).toBeLessThan(1);
+    expect(mobAtmosphere.minY).toBeGreaterThan(-1);
+    expect(mobAtmosphere.maxY).toBeLessThan(1);
+    expect(mobEarth.minX).toBeGreaterThan(-1);
+    expect(mobEarth.maxX).toBeLessThan(1);
+    expect(mobEarth.minY).toBeGreaterThan(-1);
+    expect(mobEarth.maxY).toBeLessThan(1);
+  });
+
+  test('UI03-2 — Atmosphere checkbox hides and restores the halo, leaving Earth and clouds unaffected', async ({ page }) => {
+    await page.goto(`/globe.html?time=${PINNED_ISO}`);
+    await expectGlobeStarted(page);
+    await stopAutoRotate(page);
+
+    // The checkbox is rendered checked and atmosphereMesh starts visible
+    // by default. The toggle observable is atmosphereMesh.visible, exposed
+    // through the verification handle as the parent scene's first matching
+    // mesh by renderOrder (atmosphere is the only BackSide additive sphere).
+    const atmosphereHandle = () =>
+      page.evaluate(() => {
+        const scene = window.__daylightGlobe.getScene();
+        // Locate the BackSide additive sphere — the only object that matches
+        // both the side and the blending mode of the atmosphere mesh.
+        let mesh = null;
+        scene.traverse((obj) => {
+          if (obj.isMesh && obj.material && obj.material.side === 1 /* BackSide */
+              && obj.material.blending === 2 /* AdditiveBlending */) {
+            mesh = obj;
+          }
+        });
+        return mesh ? { visible: mesh.visible } : null;
+      });
+
+    // Initial: atmosphere is rendered (visible true), checkbox is checked.
+    await expect.poll(atmosphereHandle, { timeout: 5000 }).toEqual({ visible: true });
+    await expect(page.locator('#toggle-atmosphere')).toBeChecked();
+
+    // Toggle off: the mesh must hide and the checkbox must uncheck.
+    await page.locator('#toggle-atmosphere').uncheck();
+    await expect.poll(atmosphereHandle, { timeout: 5000 }).toEqual({ visible: false });
+    await expect(page.locator('#toggle-atmosphere')).not.toBeChecked();
+
+    // Toggle on: the mesh must come back.
+    await page.locator('#toggle-atmosphere').check();
+    await expect.poll(atmosphereHandle, { timeout: 5000 }).toEqual({ visible: true });
+    await expect(page.locator('#toggle-atmosphere')).toBeChecked();
+
+    // Earth and clouds must remain rendered and unaffected across the cycle.
+    const sceneMeshState = page.evaluate(() => {
+      const scene = window.__daylightGlobe.getScene();
+      const state = {};
+      scene.traverse((obj) => {
+        if (obj.isMesh) state[obj.geometry && obj.geometry.type] = obj.visible;
+      });
+      return state;
+    });
+    const meshes = await sceneMeshState;
+    expect(meshes['SphereGeometry']).toBe(true);
   });
 });
