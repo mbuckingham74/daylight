@@ -736,3 +736,143 @@ test.describe('E2E-18 — UI-01 global map framing', () => {
     });
   });
 });
+
+test.describe('E2E-19 — UI-04 Solstice Twin fact on the 2D map', () => {
+  // UI04 is a small informational card on the existing 2D map's left
+  // panel. It surfaces the calendar date on the opposite side of the
+  // source's preceding solstice whose daylight duration at the selected
+  // map point is closest to the source's. The card is display-only and
+  // must not change time, coordinates, map state, or URL state.
+
+  const solsticeTwinDate = (page) => page.locator('#solstice-twin-date');
+  const solsticeTwinDaylight = (page) => page.locator('#solstice-twin-daylight');
+  const solsticeTwinCompare = (page) => page.locator('#solstice-twin-compare');
+
+  test('UI04-1 — visible fact: card renders with date, daylight, and comparison', async ({ page }) => {
+    await page.goto(`/?time=${PINNED_ISO}&lat=47.6062&lon=-122.3321&zoom=4`);
+    await expectBooted(page);
+
+    // The Solstice Twin card sits in the Map tab's left panel.
+    await expect(page.locator('#solstice-twin-info')).toBeVisible();
+    await expect(page.locator('#solstice-twin-info h2')).toHaveText('Solstice Twin');
+
+    // A non-polar Seattle source on the June solstice must produce a
+    // populated fact. The twin date is a calendar date ("Mon DD"), the
+    // daylight duration matches the production "Hh Mm" form, and the
+    // comparison line identifies the SOURCE date (e.g. "Jun 21:") so
+    // the display stays truthful when the user pins a historical or
+    // future instant. It must never say the literal word "Today".
+    await expect(solsticeTwinDate(page)).not.toHaveText('--');
+    await expect(solsticeTwinDate(page)).toHaveText(/^[A-Z][a-z]{2} \d{1,2}$/);
+    await expect(solsticeTwinDaylight(page)).toHaveText(/^\d+h \d+m daylight$/);
+    await expect(solsticeTwinCompare(page)).toHaveText(/^[A-Z][a-z]{2,4} \d{1,2}: \d+h \d+m · [\d.]+ (sec|min) difference$/);
+    await expect(solsticeTwinCompare(page)).not.toHaveText(/Today/);
+
+    // Display-only: the Solstice Twin fact must not have changed the
+    // displayed time, the pinned URL, or the map view.
+    await expect(utcClock(page)).toHaveText(PINNED_CLOCK);
+    await expect(liveBtn(page)).not.toHaveClass(/active/);
+    await expect(page).toHaveURL(/time=2026-06-21T08:24:00\.000Z/);
+    await expect(page).toHaveURL(/lat=47\.6062/);
+  });
+
+  test('UI04-2 — date update: changing the displayed date through a real UI path updates the fact', async ({ page }) => {
+    await page.goto(`/?time=${PINNED_ISO}&lat=47.6062&lon=-122.3321&zoom=4`);
+    await expectBooted(page);
+
+    const beforeDate = await solsticeTwinDate(page).textContent();
+    const beforeDaylight = await solsticeTwinDaylight(page).textContent();
+    const beforeCompare = await solsticeTwinCompare(page).textContent();
+    expect(beforeDate).not.toBe('--');
+    expect(beforeDaylight).not.toBe('--');
+    expect(beforeCompare).not.toBe('--');
+    // The pinned source (Jun 21 2026) must be identified by its own
+    // date label in the comparison line — never the literal word "Today".
+    expect(beforeCompare).toMatch(/^Jun 21:/);
+    expect(beforeCompare).not.toMatch(/Today/);
+
+    // Change the date through the real datetime-local control, which is
+    // the production path for arbitrary date selection. The control is a
+    // datetime-local input interpreted in the browser's timezone, so we
+    // first read the UTC hint to learn the exact UTC equivalent and then
+    // assert it (rather than assuming a fixed offset). Aug 15 has a
+    // ~14h 18m daylight length at Seattle and a meaningfully different
+    // twin than Jun 21's ~15h 53m.
+    await page.locator('#datetime-input').fill('2026-08-15T12:00');
+    await page.locator('#datetime-input').dispatchEvent('change');
+
+    await expect
+      .poll(async () => (await page.locator('#datetime-utc-hint').textContent()), { timeout: 5000 })
+      .toMatch(/^2026-08-15/);
+
+    // The heavy update should re-render the fact with a new twin.
+    await expect
+      .poll(async () => (await solsticeTwinDaylight(page).textContent()) !== beforeDaylight, { timeout: 5000 })
+      .toBe(true);
+    await expect
+      .poll(async () => (await solsticeTwinDate(page).textContent()) !== beforeDate, { timeout: 5000 })
+      .toBe(true);
+
+    // The comparison line must now identify the new source date (Aug 15),
+    // not the literal "Today" word and not the previous Jun 21 label.
+    await expect
+      .poll(async () => solsticeTwinCompare(page).textContent(), { timeout: 5000 })
+      .toMatch(/^Aug 15:/);
+    await expect(solsticeTwinCompare(page)).not.toHaveText(/Today/);
+    await expect(solsticeTwinCompare(page)).not.toHaveText(/Jun 21/);
+
+    // Display-only: the URL carries the new pinned instant and the time
+    // controls reflect the change because of the user's input, not
+    // because the fact rendering altered state.
+    await expect(liveBtn(page)).not.toHaveClass(/active/);
+    await expect(page).toHaveURL(/time=2026-08-15/);
+  });
+
+  test('UI04-3 — location update: clicking a different city updates the fact', async ({ page }) => {
+    // Use the uncentered default map view so every city marker is in the
+    // visible safe area — the existing E2E-06 London pattern depends on
+    // the same condition.
+    await page.goto(`/?time=${PINNED_ISO}`);
+    await expectBooted(page);
+
+    const seattleDaylight = await solsticeTwinDaylight(page).textContent();
+    expect(seattleDaylight).not.toBe('--');
+
+    // Click the Sydney marker — Sydney's June 21 daylight is ~9h 50m
+    // (Southern Hemisphere winter), so the twin fact must change to a
+    // SH calendar date in the spring half-year. The existing E2E-06
+    // pattern locates the marker path whose center sits just below the
+    // city tooltip and clicks it through the same code path users use.
+    const sydneyTooltip = page.locator('.city-label', { hasText: 'Sydney' });
+    await expect(sydneyTooltip).toBeVisible();
+    const sydneyBox = await sydneyTooltip.boundingBox();
+    const sydneyTarget = await page.evaluate((tooltipBox) => {
+      const anchorX = tooltipBox.x + tooltipBox.width / 2;
+      const anchorY = tooltipBox.y + tooltipBox.height + 6;
+      let best = null;
+      let bestDist = Infinity;
+      for (const p of document.querySelectorAll('.leaflet-overlay-pane path')) {
+        const r = p.getBoundingClientRect();
+        const cx = r.x + r.width / 2;
+        const cy = r.y + r.height / 2;
+        const d = Math.hypot(cx - anchorX, cy - anchorY);
+        if (d < bestDist) {
+          bestDist = d;
+          best = { x: cx, y: cy };
+        }
+      }
+      return best;
+    }, sydneyBox);
+    await page.mouse.click(sydneyTarget.x, sydneyTarget.y);
+
+    await expect(page.locator('#location-info h2')).toHaveText('Sydney');
+    await expect
+      .poll(async () => (await solsticeTwinDaylight(page).textContent()) !== seattleDaylight, { timeout: 5000 })
+      .toBe(true);
+
+    // Display-only: the time and the URL state did not change just
+    // because the fact updated — only because the user clicked.
+    await expect(utcClock(page)).toHaveText(PINNED_CLOCK);
+    await expect(page).toHaveURL(/time=2026-06-21T08:24:00\.000Z/);
+  });
+});

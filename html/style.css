@@ -472,6 +472,76 @@ html, body {
   cursor: progress;
 }
 
+.solstice-twin-card {
+  margin-bottom: 18px;
+}
+
+.solstice-twin-card .location-header {
+  margin-bottom: 10px;
+}
+
+.solstice-twin-unavailable {
+  margin: 0;
+  color: #8b93a8;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.solstice-twin-body[hidden] {
+  display: none;
+}
+
+.solstice-twin-date {
+  color: #f0f3fa;
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.solstice-twin-daylight {
+  color: #c6cbda;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+
+.solstice-twin-compare {
+  color: #8b93a8;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  margin-top: 6px;
+}
+
+.info-btn {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: #9ba4ba;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.info-btn:hover,
+.info-btn:focus-visible {
+  color: #ffd85c;
+  background: rgba(255, 216, 92, 0.1);
+  border-color: rgba(255, 216, 92, 0.55);
+  outline: none;
+}
+
 .controls {
   display: flex;
   flex-direction: column;

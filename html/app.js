@@ -16,6 +16,7 @@
   if (!window.UrlState) missingDeps.push('URL state module');
   if (!window.TimeState) missingDeps.push('Time state module');
   if (!window.DaylightFormat) missingDeps.push('Formatting module');
+  if (!window.SolsticeTwin) missingDeps.push('Solstice twin module');
   if (!window.L) missingDeps.push('Leaflet (map library)');
   if (!window.SunCalc) missingDeps.push('SunCalc (sunrise/sunset times)');
 
@@ -37,6 +38,7 @@
   const UrlState = window.UrlState;
   const TimeState = window.TimeState;
   const DaylightFormat = window.DaylightFormat;
+  const SolsticeTwin = window.SolsticeTwin;
   const { getSeasonEventYear, isWithinSupportedRange } = window.SeasonYear;
   const {
     D2R, MS_PER_DAY, TWILIGHT_THRESHOLDS,
@@ -245,6 +247,76 @@
 
   function getDayLengthSeconds(date, lat, lng) {
     return smGetDayLengthSeconds(date, lat, lng, SunCalc);
+  }
+
+  // UI-04 — Solstice Twin: a small informational card on the 2D map's
+  // left panel that surfaces the calendar date on the opposite side of
+  // the source's preceding solstice whose daylight duration at the
+  // selected coordinates is closest to the source's. The card is
+  // display-only and never affects time, map state, URL state, or
+  // astronomy. It updates when the displayed date or the selected map
+  // target changes — never on every animation frame.
+  const solsticeTwin = SolsticeTwin.create({
+    getSeasonEvents: SM.getSeasonEvents,
+    getDayLengthSeconds,
+    MS_PER_DAY,
+    isValidDate
+  });
+
+  function formatSolsticeTwinDate(date) {
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC'
+    });
+  }
+
+  function formatSolsticeTwinDifference(seconds) {
+    if (!isFinite(seconds) || seconds < 0) return '--';
+    if (seconds < 60) return `${Math.round(seconds)} sec`;
+    return `${(seconds / 60).toFixed(1)} min`;
+  }
+
+  function setSolsticeTwinUnavailable(unavailable) {
+    const unavailableEl = document.getElementById('solstice-twin-unavailable');
+    const bodyEl = document.getElementById('solstice-twin-body');
+    unavailableEl.hidden = !unavailable;
+    bodyEl.hidden = unavailable;
+  }
+
+  function renderSolsticeTwin(date, target) {
+    const dateEl = document.getElementById('solstice-twin-date');
+    const daylightEl = document.getElementById('solstice-twin-daylight');
+    const compareEl = document.getElementById('solstice-twin-compare');
+    if (!dateEl || !daylightEl || !compareEl) return;
+    if (!isValidDate(date) || !target || !isFinite(target.lat) || !isFinite(target.lng)) {
+      dateEl.textContent = '--';
+      daylightEl.textContent = '-- daylight';
+      compareEl.textContent = '--';
+      setSolsticeTwinUnavailable(false);
+      return;
+    }
+    const result = solsticeTwin.find(date, target.lat, target.lng, SunCalc);
+    if (!result.available) {
+      dateEl.textContent = '--';
+      daylightEl.textContent = '-- daylight';
+      compareEl.textContent = '--';
+      setSolsticeTwinUnavailable(true);
+      return;
+    }
+    setSolsticeTwinUnavailable(false);
+    dateEl.textContent = formatSolsticeTwinDate(result.date);
+    daylightEl.textContent = `${formatDuration(result.dayLength)} daylight`;
+    // The source may be a live, pinned historical, or pinned future date.
+    // Show its actual calendar date rather than the literal word "Today"
+    // so the comparison stays truthful across live/pinned modes and
+    // year crossings. Uses the same concise date form as the twin date.
+    const sourceLabel = formatSolsticeTwinDate(date);
+    compareEl.textContent = `${sourceLabel}: ${formatDuration(result.sourceDayLength)} · ${formatSolsticeTwinDifference(result.difference)} difference`;
+  }
+
+  function getSolsticeTwinTarget() {
+    return getSolarDetailsTarget();
   }
 
   function getSolarDetailsTarget() {
@@ -689,6 +761,7 @@
     refreshMapPointReadout(date);
     browserLocationController.refreshSunReadout(date);
     solarDetails.update(date);
+    renderSolsticeTwin(date, getSolsticeTwinTarget());
 
     lastHeavyUpdateMs = Date.now();
   }
@@ -716,6 +789,7 @@
     hoverDebounceTimer = setTimeout(() => {
       refreshMapPointReadout();
       solarDetails.update(currentTime());
+      renderSolsticeTwin(currentTime(), getSolsticeTwinTarget());
       hoverDebounceTimer = null;
     }, HOVER_DEBOUNCE_MS);
   }
@@ -727,6 +801,7 @@
     activeMapPoint = { lat, lng: normalizedLng, label, timeZone: timeZone || lookupTimeZone(lat, normalizedLng) };
     refreshMapPointReadout();
     solarDetails.update(currentTime());
+    renderSolsticeTwin(currentTime(), getSolsticeTwinTarget());
   }
 
   function refreshMapPointReadout(date = currentTime()) {
