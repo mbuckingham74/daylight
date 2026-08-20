@@ -103,7 +103,7 @@ BASE_URL="http://127.0.0.1:${PORT}"
 HTML_URLS=("${BASE_URL}/" "${BASE_URL}/index.html" "${BASE_URL}/globe.html")
 ASSET_URLS=("${BASE_URL}/app.js" "${BASE_URL}/style.css" "${BASE_URL}/favicon.svg" "${BASE_URL}/assets/globe/clouds.png")
 
-CSP="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: https://server.arcgisonline.com https://*.arcgisonline.com; connect-src 'self' https://server.arcgisonline.com https://*.arcgisonline.com; font-src 'self'; worker-src 'self' blob:; report-uri /csp-report"
+CSP="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://lytics.forkstech.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: https://server.arcgisonline.com https://*.arcgisonline.com; connect-src 'self' https://server.arcgisonline.com https://*.arcgisonline.com https://lytics.forkstech.com; font-src 'self'; worker-src 'self' blob:; report-uri /csp-report"
 
 SECURITY_HEADERS=(
   "X-Frame-Options:SAMEORIGIN"
